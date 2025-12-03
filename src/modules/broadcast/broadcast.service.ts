@@ -20,13 +20,17 @@ import {
 import { CommonService } from '../common/common.service';
 import { EventDetailService } from '../event-detail/event-detail.service';
 import { GroupService } from '../group/group.service';
-import { GroupCategory, IGroup, IGroupForVars } from '../group/group.interface';
+import { IGroup, IGroupForVars } from '../group/group.interface';
+import { CategoryService } from '../category/category.service';
+import { SubcategoryService } from '../subcategory/subcategory.service';
+import { GroupCategoryService } from '../group-category/group-category.service';
 
 import {
   IBroadcastSession,
   IPostMessage,
   IBroadcast,
   IBroadcastMessageDetail,
+  IBroadcastTarget,
 } from './broadcast.type';
 import { KnexService } from '../knex/knex.service';
 import { getContextTelegramUserId } from 'src/utils/context';
@@ -47,6 +51,9 @@ export class BroadcastService {
     private readonly groupService: GroupService,
     private readonly knexService: KnexService,
     private readonly userService: UserService,
+    private readonly categoryService: CategoryService,
+    private readonly subcategoryService: SubcategoryService,
+    private readonly groupCategoryService: GroupCategoryService,
     @Inject(forwardRef(() => CommonService))
     private readonly commonService: CommonService,
   ) {}
@@ -115,18 +122,24 @@ export class BroadcastService {
   private async showBroadcastMenu(ctx: Context): Promise<void> {
     try {
       const globalCount = await this.groupService.getGroupCount();
-      const sriLankaCount = await this.groupService.getGroupCountByCategory(
-        GroupCategory.SRI_LANKA,
-      );
-      const vipCount = await this.groupService.getGroupCountByCategory(GroupCategory.VIP);
+      const subcategories = await this.subcategoryService.getAll();
+
+      // Build subcategory buttons with counts
+      const subcategoryButtons: InlineKeyboardButton[][] = [];
+      for (const subcategory of subcategories) {
+        const count = await this.groupService.getTotalGroupCountUnderSubcategory(subcategory.id);
+        subcategoryButtons.push([
+          {
+            text: `${subcategory.name} (${count} groups)`,
+            callback_data: `subcategory_${subcategory.id}`,
+          },
+        ]);
+      }
 
       const welcomeMessage = `Hello *Admin* 👋
 Here you can create and broadcast messages to community groups\\.
 
-📊 *Group Statistics:*
-• 🌍 Global: ${globalCount} groups \\(all groups\\)
-• 🇱🇰 Sri Lanka: ${sriLankaCount} groups
-• ⭐ VIP: ${vipCount} groups
+📊 *Total Groups:* ${globalCount}
 
 *You can use the following variables in your broadcast messages:*\n
 >\\- \`\\{group\\}\` — Group name
@@ -141,21 +154,15 @@ Here you can create and broadcast messages to community groups\\.
 >\\- \`\\{year\\}\` — Event year
 >\\- \`\\{unlock\\_link\\}\` — Unlock Protocol link\n
 
-*Select a category to broadcast:*
+*Select a broadcast target:*
 `;
 
       await ctx.reply(welcomeMessage, {
         parse_mode: 'MarkdownV2',
         reply_markup: {
           inline_keyboard: [
-            [{ text: `🌍 Global (${globalCount} groups)`, callback_data: 'category_global' }],
-            [
-              {
-                text: `🇱🇰 Sri Lanka (${sriLankaCount} groups)`,
-                callback_data: 'category_sri_lanka',
-              },
-            ],
-            [{ text: `⭐ VIP (${vipCount} groups)`, callback_data: 'category_vip' }],
+            [{ text: `🌍 Global (${globalCount} groups)`, callback_data: 'broadcast_global' }],
+            ...subcategoryButtons,
           ],
         },
       });
@@ -184,9 +191,27 @@ Here you can create and broadcast messages to community groups\\.
       return;
     }
 
-    // Handle category selection
-    if (callbackData.startsWith('category_')) {
-      await this.handleCategorySelection(ctx, callbackData);
+    // Handle global broadcast selection
+    if (callbackData === 'broadcast_global') {
+      await this.handleGlobalSelection(ctx);
+      return;
+    }
+
+    // Handle subcategory selection (e.g., subcategory_uuid)
+    if (callbackData.startsWith('subcategory_')) {
+      await this.handleSubcategorySelection(ctx, callbackData);
+      return;
+    }
+
+    // Handle "All in subcategory" selection
+    if (callbackData.startsWith('all_subcategory_')) {
+      await this.handleAllSubcategorySelection(ctx, callbackData);
+      return;
+    }
+
+    // Handle group category selection (e.g., group_category_uuid)
+    if (callbackData.startsWith('group_category_')) {
+      await this.handleGroupCategorySelection(ctx, callbackData);
       return;
     }
 
@@ -204,13 +229,12 @@ Here you can create and broadcast messages to community groups\\.
   }
 
   /**
-   * Handles category selection for broadcast targeting
+   * Handles global broadcast selection (all groups)
    * @param {Context} ctx - The Telegraf context
-   * @param {string} callbackData - The callback data containing the category
    * @returns {Promise<void>}
    * @private
    */
-  private async handleCategorySelection(ctx: Context, callbackData: string): Promise<void> {
+  private async handleGlobalSelection(ctx: Context): Promise<void> {
     const userId = getContextTelegramUserId(ctx);
     if (!userId) return;
 
@@ -220,41 +244,255 @@ Here you can create and broadcast messages to community groups\\.
       return;
     }
 
-    let category: GroupCategory;
-    let categoryName: string;
-
-    switch (callbackData) {
-      case 'category_global':
-        category = GroupCategory.GLOBAL;
-        categoryName = '🌍 Global';
-        break;
-      case 'category_sri_lanka':
-        category = GroupCategory.SRI_LANKA;
-        categoryName = '🇱🇰 Sri Lanka';
-        break;
-      case 'category_vip':
-        category = GroupCategory.VIP;
-        categoryName = '⭐ VIP';
-        break;
-      default:
-        await ctx.answerCbQuery('❌ Invalid category');
-        return;
-    }
-
     await ctx.deleteMessage().catch(() => {});
 
-    const groupCount = await this.groupService.getGroupCountByCategory(category);
+    const groupCount = await this.groupService.getGroupCount();
+
+    const broadcastTarget: IBroadcastTarget = {
+      type: 'global',
+    };
 
     await this.commonService.setUserState(Number(userId), {
       flow: 'broadcast',
       step: 'creating_post',
       messages: [] as IPostMessage[],
-      selectedCategory: category,
+      broadcastTarget,
     });
 
     await ctx.reply(
       this.escapeMarkdown(
-        `📢 Creating broadcast for ${categoryName} (${groupCount} groups)\n\n` +
+        `📢 Creating GLOBAL broadcast (${groupCount} groups)\n\n` +
+          `Please send me the content you want to broadcast.\n\n` +
+          `You can send:\n` +
+          `• Text messages\n` +
+          `• Photos with captions\n` +
+          `• Videos with captions\n` +
+          `• Documents\n` +
+          `• Animations (GIFs)\n\n` +
+          `Use the keyboard below to manage your broadcast.`,
+      ),
+      {
+        parse_mode: 'MarkdownV2',
+        reply_markup: this.getKeyboardMarkup(),
+      },
+    );
+
+    await ctx.answerCbQuery();
+  }
+
+  /**
+   * Handles subcategory selection - shows group categories if available, otherwise starts broadcast
+   * @param {Context} ctx - The Telegraf context
+   * @param {string} callbackData - The callback data containing the subcategory ID
+   * @returns {Promise<void>}
+   * @private
+   */
+  private async handleSubcategorySelection(ctx: Context, callbackData: string): Promise<void> {
+    const userId = getContextTelegramUserId(ctx);
+    if (!userId) return;
+
+    const isAdmin = await this.isUserAdmin(userId);
+    if (!isAdmin) {
+      await ctx.answerCbQuery('❌ You do not have access to broadcast messages.');
+      return;
+    }
+
+    const subcategoryId = callbackData.replace('subcategory_', '');
+    const subcategory = await this.subcategoryService.getById(subcategoryId);
+
+    if (!subcategory) {
+      await ctx.answerCbQuery('❌ Subcategory not found');
+      return;
+    }
+
+    // Check if subcategory has group categories
+    if (subcategory.has_group_categories) {
+      // Show group category options
+      await ctx.deleteMessage().catch(() => {});
+
+      const groupCategories = await this.groupCategoryService.getBySubcategory(subcategoryId);
+      const totalCount = await this.groupService.getTotalGroupCountUnderSubcategory(subcategoryId);
+
+      // Build buttons for group categories
+      const buttons: InlineKeyboardButton[][] = [];
+
+      // Add "All in [Subcategory]" option
+      buttons.push([
+        {
+          text: `📢 All ${subcategory.name} (${totalCount} groups)`,
+          callback_data: `all_subcategory_${subcategoryId}`,
+        },
+      ]);
+
+      // Add individual group category options
+      for (const gc of groupCategories) {
+        const count = await this.groupService.getGroupCountByGroupCategory(gc.id);
+        buttons.push([
+          {
+            text: `${gc.name} (${count} groups)`,
+            callback_data: `group_category_${gc.id}`,
+          },
+        ]);
+      }
+
+      await ctx.reply(
+        this.escapeMarkdown(
+          `📂 ${subcategory.name}\n\n` + `Select a group category or broadcast to all:`,
+        ),
+        {
+          parse_mode: 'MarkdownV2',
+          reply_markup: { inline_keyboard: buttons },
+        },
+      );
+    } else {
+      // No group categories - start broadcast directly to subcategory groups
+      await ctx.deleteMessage().catch(() => {});
+
+      const groupCount = await this.groupService.getGroupCountBySubcategory(subcategoryId);
+
+      const broadcastTarget: IBroadcastTarget = {
+        type: 'subcategory',
+        subcategoryId: subcategory.id,
+        subcategoryName: subcategory.name,
+      };
+
+      await this.commonService.setUserState(Number(userId), {
+        flow: 'broadcast',
+        step: 'creating_post',
+        messages: [] as IPostMessage[],
+        broadcastTarget,
+      });
+
+      await ctx.reply(
+        this.escapeMarkdown(
+          `📢 Creating broadcast for ${subcategory.name} (${groupCount} groups)\n\n` +
+            `Please send me the content you want to broadcast.\n\n` +
+            `You can send:\n` +
+            `• Text messages\n` +
+            `• Photos with captions\n` +
+            `• Videos with captions\n` +
+            `• Documents\n` +
+            `• Animations (GIFs)\n\n` +
+            `Use the keyboard below to manage your broadcast.`,
+        ),
+        {
+          parse_mode: 'MarkdownV2',
+          reply_markup: this.getKeyboardMarkup(),
+        },
+      );
+    }
+
+    await ctx.answerCbQuery();
+  }
+
+  /**
+   * Handles "All in subcategory" selection - broadcasts to all groups under a subcategory
+   * @param {Context} ctx - The Telegraf context
+   * @param {string} callbackData - The callback data
+   * @returns {Promise<void>}
+   * @private
+   */
+  private async handleAllSubcategorySelection(ctx: Context, callbackData: string): Promise<void> {
+    const userId = getContextTelegramUserId(ctx);
+    if (!userId) return;
+
+    const isAdmin = await this.isUserAdmin(userId);
+    if (!isAdmin) {
+      await ctx.answerCbQuery('❌ You do not have access to broadcast messages.');
+      return;
+    }
+
+    const subcategoryId = callbackData.replace('all_subcategory_', '');
+    const subcategory = await this.subcategoryService.getById(subcategoryId);
+
+    if (!subcategory) {
+      await ctx.answerCbQuery('❌ Subcategory not found');
+      return;
+    }
+
+    await ctx.deleteMessage().catch(() => {});
+
+    const groupCount = await this.groupService.getTotalGroupCountUnderSubcategory(subcategoryId);
+
+    const broadcastTarget: IBroadcastTarget = {
+      type: 'subcategory',
+      subcategoryId: subcategory.id,
+      subcategoryName: subcategory.name,
+    };
+
+    await this.commonService.setUserState(Number(userId), {
+      flow: 'broadcast',
+      step: 'creating_post',
+      messages: [] as IPostMessage[],
+      broadcastTarget,
+    });
+
+    await ctx.reply(
+      this.escapeMarkdown(
+        `📢 Creating broadcast for ALL ${subcategory.name} groups (${groupCount} groups)\n\n` +
+          `Please send me the content you want to broadcast.\n\n` +
+          `You can send:\n` +
+          `• Text messages\n` +
+          `• Photos with captions\n` +
+          `• Videos with captions\n` +
+          `• Documents\n` +
+          `• Animations (GIFs)\n\n` +
+          `Use the keyboard below to manage your broadcast.`,
+      ),
+      {
+        parse_mode: 'MarkdownV2',
+        reply_markup: this.getKeyboardMarkup(),
+      },
+    );
+
+    await ctx.answerCbQuery();
+  }
+
+  /**
+   * Handles group category selection for broadcast targeting
+   * @param {Context} ctx - The Telegraf context
+   * @param {string} callbackData - The callback data containing the group category ID
+   * @returns {Promise<void>}
+   * @private
+   */
+  private async handleGroupCategorySelection(ctx: Context, callbackData: string): Promise<void> {
+    const userId = getContextTelegramUserId(ctx);
+    if (!userId) return;
+
+    const isAdmin = await this.isUserAdmin(userId);
+    if (!isAdmin) {
+      await ctx.answerCbQuery('❌ You do not have access to broadcast messages.');
+      return;
+    }
+
+    const groupCategoryId = callbackData.replace('group_category_', '');
+    const groupCategory = await this.groupCategoryService.getById(groupCategoryId);
+
+    if (!groupCategory) {
+      await ctx.answerCbQuery('❌ Group category not found');
+      return;
+    }
+
+    await ctx.deleteMessage().catch(() => {});
+
+    const groupCount = await this.groupService.getGroupCountByGroupCategory(groupCategoryId);
+
+    const broadcastTarget: IBroadcastTarget = {
+      type: 'group_category',
+      groupCategoryId: groupCategory.id,
+      groupCategoryName: groupCategory.name,
+    };
+
+    await this.commonService.setUserState(Number(userId), {
+      flow: 'broadcast',
+      step: 'creating_post',
+      messages: [] as IPostMessage[],
+      broadcastTarget,
+    });
+
+    await ctx.reply(
+      this.escapeMarkdown(
+        `📢 Creating broadcast for ${groupCategory.name} (${groupCount} groups)\n\n` +
           `Please send me the content you want to broadcast.\n\n` +
           `You can send:\n` +
           `• Text messages\n` +
@@ -673,14 +911,12 @@ Here you can create and broadcast messages to community groups\\.
     let broadcastId: string;
 
     try {
-      // Get groups based on selected category
-      const category = session.selectedCategory || GroupCategory.GLOBAL;
-      const groups = await this.groupService.getGroupsByCategory(category);
-
-      const categoryName = this.getCategoryDisplayName(category);
+      // Get groups based on broadcast target
+      const groups = await this.getGroupsForBroadcast(session.broadcastTarget);
+      const targetName = this.getBroadcastTargetDisplayName(session.broadcastTarget);
 
       if (groups.length === 0) {
-        await ctx.reply(this.escapeMarkdown(`❌ No groups found in ${categoryName} category.`), {
+        await ctx.reply(this.escapeMarkdown(`❌ No groups found for ${targetName}.`), {
           parse_mode: 'MarkdownV2',
         });
         return;
@@ -688,7 +924,7 @@ Here you can create and broadcast messages to community groups\\.
 
       await ctx.reply(
         this.escapeMarkdown(
-          `🚀 Starting to send messages to ${groups.length} groups (${categoryName})...`,
+          `🚀 Starting to send messages to ${groups.length} groups (${targetName})...`,
         ),
         {
           parse_mode: 'MarkdownV2',
@@ -1523,22 +1759,51 @@ Here you can create and broadcast messages to community groups\\.
   }
 
   /**
-   * Gets the display name for a group category
-   * @param {GroupCategory} category - The category
+   * Gets groups for broadcasting based on the target selection
+   * @param {IBroadcastTarget | undefined} target - The broadcast target
+   * @returns {Promise<IGroup[]>} Array of groups to broadcast to
+   * @private
+   */
+  private async getGroupsForBroadcast(target?: IBroadcastTarget): Promise<IGroup[]> {
+    if (!target || target.type === 'global') {
+      // Global - all groups
+      return this.groupService.getAllGroups();
+    }
+
+    if (target.type === 'subcategory' && target.subcategoryId) {
+      // All groups under a subcategory (direct + nested via group_category)
+      return this.groupService.getAllGroupsUnderSubcategory(target.subcategoryId);
+    }
+
+    if (target.type === 'group_category' && target.groupCategoryId) {
+      // Groups in a specific group category
+      return this.groupService.getGroupsByGroupCategory(target.groupCategoryId);
+    }
+
+    // Fallback to all groups
+    return this.groupService.getAllGroups();
+  }
+
+  /**
+   * Gets the display name for a broadcast target
+   * @param {IBroadcastTarget | undefined} target - The broadcast target
    * @returns {string} The display name
    * @private
    */
-  private getCategoryDisplayName(category: GroupCategory): string {
-    switch (category) {
-      case GroupCategory.GLOBAL:
-        return '🌍 Global';
-      case GroupCategory.SRI_LANKA:
-        return '🇱🇰 Sri Lanka';
-      case GroupCategory.VIP:
-        return '⭐ VIP';
-      default:
-        return category;
+  private getBroadcastTargetDisplayName(target?: IBroadcastTarget): string {
+    if (!target || target.type === 'global') {
+      return '🌍 Global';
     }
+
+    if (target.type === 'subcategory' && target.subcategoryName) {
+      return `📂 ${target.subcategoryName}`;
+    }
+
+    if (target.type === 'group_category' && target.groupCategoryName) {
+      return `📁 ${target.groupCategoryName}`;
+    }
+
+    return '🌍 Global';
   }
 
   /**

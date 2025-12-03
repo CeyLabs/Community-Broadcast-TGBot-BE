@@ -1,4 +1,4 @@
-import { GroupCategory, IGroup } from '../group/group.interface';
+import { IGroup } from '../group/group.interface';
 
 /**
  * @fileoverview Type definitions for the broadcast module
@@ -21,6 +21,24 @@ export type TMediaType =
   | 'location'
   | 'contact'
   | 'sticker';
+
+/**
+ * Interface for broadcast target selection
+ * @interface IBroadcastTarget
+ * @description Defines the target for broadcasting - can be global, subcategory, or group category
+ */
+export interface IBroadcastTarget {
+  /** Target type: global broadcasts to all, subcategory to all under subcategory, group_category to specific group category */
+  type: 'global' | 'subcategory' | 'group_category';
+  /** ID of the subcategory (when type is 'subcategory') */
+  subcategoryId?: string;
+  /** Name of the subcategory for display */
+  subcategoryName?: string;
+  /** ID of the group category (when type is 'group_category') */
+  groupCategoryId?: string;
+  /** Name of the group category for display */
+  groupCategoryName?: string;
+}
 
 /**
  * Interface representing a post message
@@ -51,7 +69,12 @@ export interface IPostMessage {
  */
 export interface IBroadcastSession {
   /** Current step in the broadcast process */
-  step: 'awaiting_message' | 'creating_post' | 'idle' | 'selecting_category';
+  step:
+    | 'awaiting_message'
+    | 'creating_post'
+    | 'idle'
+    | 'selecting_subcategory'
+    | 'selecting_group_category';
   /** Currently selected action */
   selectedAction?: string;
   /** Array of messages in the broadcast */
@@ -62,8 +85,8 @@ export interface IBroadcastSession {
   currentMessageIndex?: number;
   /** Selected groups for broadcasting */
   selectedGroups?: IGroup[];
-  /** Selected category for broadcasting */
-  selectedCategory?: GroupCategory;
+  /** Selected broadcast target (hierarchical) */
+  broadcastTarget?: IBroadcastTarget;
 }
 
 /**

@@ -4,19 +4,10 @@
  */
 
 /**
- * Enum representing group categories for broadcast targeting
- * @enum GroupCategory
- */
-export enum GroupCategory {
-  GLOBAL = 'global',
-  SRI_LANKA = 'sri_lanka',
-  VIP = 'vip',
-}
-
-/**
  * Interface representing a community group
  * @interface IGroup
  * @description Defines the structure of a community group for broadcast messages
+ * Groups can belong to either a subcategory directly OR a group_category (nested under subcategory)
  */
 export interface IGroup {
   /** Unique identifier for the group */
@@ -26,9 +17,17 @@ export interface IGroup {
   /** Telegram group ID (chat ID) */
   group_id: string;
   /** Telegram invite link for the group */
-  telegram_link?: string | null;
-  /** Category of the group (global, sri_lanka, vip) */
-  category: GroupCategory;
+  telegram_link: string;
+  /**
+   * Foreign key to subcategory table (for direct groups like Other, Clients)
+   * Mutually exclusive with group_category_id
+   */
+  subcategory_id?: string | null;
+  /**
+   * Foreign key to group_category table (for nested groups like Ceylon Cash, Community under Sri Lanka)
+   * Mutually exclusive with subcategory_id
+   */
+  group_category_id?: string | null;
   /** Timestamp when the group was created */
   created_at?: Date;
   /** Timestamp when the group was last updated */
@@ -46,4 +45,17 @@ export interface IGroupForVars {
   group_id?: string | null;
   /** Telegram invite link */
   telegram_link?: string | null;
+}
+
+/**
+ * Interface for group with joined hierarchy information
+ * @interface IGroupWithHierarchy
+ */
+export interface IGroupWithHierarchy extends IGroup {
+  /** Subcategory name (if directly under subcategory) */
+  subcategory_name?: string | null;
+  /** Group category name (if under group_category) */
+  group_category_name?: string | null;
+  /** Parent subcategory name (via group_category) */
+  parent_subcategory_name?: string | null;
 }

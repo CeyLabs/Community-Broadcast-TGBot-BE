@@ -146,7 +146,7 @@ export class WelcomeService {
           await this.groupService.createGroup({
             name: chatTitle,
             group_id: chatId,
-            telegram_link: null,
+            telegram_link: '',
           });
 
           await TelegramLogger.info(`New group registered: ${chatTitle} (${chatId})`);

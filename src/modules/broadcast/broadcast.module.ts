@@ -10,6 +10,9 @@ import { GroupModule } from '../group/group.module';
 import { BroadcastService } from './broadcast.service';
 import { CommonModule } from '../common/common.module';
 import { EventDetailModule } from '../event-detail/event-detail.module';
+import { CategoryModule } from '../category/category.module';
+import { SubcategoryModule } from '../subcategory/subcategory.module';
+import { GroupCategoryModule } from '../group-category/group-category.module';
 
 /**
  * Module for managing message broadcasting functionality
@@ -17,7 +20,15 @@ import { EventDetailModule } from '../event-detail/event-detail.module';
  * @description Handles broadcasting messages to community groups
  */
 @Module({
-  imports: [GroupModule, UserModule, EventDetailModule, forwardRef(() => CommonModule)],
+  imports: [
+    GroupModule,
+    UserModule,
+    EventDetailModule,
+    CategoryModule,
+    SubcategoryModule,
+    GroupCategoryModule,
+    forwardRef(() => CommonModule),
+  ],
   providers: [BroadcastService],
   exports: [BroadcastService],
 })

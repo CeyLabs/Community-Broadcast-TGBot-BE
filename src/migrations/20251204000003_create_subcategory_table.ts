@@ -1,25 +1,22 @@
 import type { Knex } from 'knex';
 
-const tableName = 'broadcast_message_detail';
+const tableName = 'subcategory';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(tableName, (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+    table.string('name').notNullable();
     table
-      .uuid('broadcast_id')
+      .uuid('category_id')
       .notNullable()
       .references('id')
-      .inTable('broadcast')
+      .inTable('category')
       .onDelete('CASCADE');
-    table.string('message_id');
-    table
-      .string('group_id')
-      .notNullable()
-      .references('group_id')
-      .inTable('group')
-      .onDelete('CASCADE');
-    table.boolean('is_sent').notNullable().defaultTo(false);
-    table.timestamp('sent_at').defaultTo(knex.fn.now());
+    table.boolean('has_group_categories').notNullable().defaultTo(false);
+    table.timestamps(true, true);
+
+    table.index('category_id', 'idx_subcategory_category_id');
+    table.index('name', 'idx_subcategory_name');
   });
 }
 
