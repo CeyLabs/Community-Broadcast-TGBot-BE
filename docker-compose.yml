@@ -3,11 +3,11 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16.3
-    container_name: cmnisal_postgres
+    container_name: broadcast_bot_postgres
     environment:
-      POSTGRES_USER: cmnisal
-      POSTGRES_PASSWORD: cmnisal
-      POSTGRES_DB: cmnisal
+      POSTGRES_USER: broadcast_bot
+      POSTGRES_PASSWORD: broadcast_bot
+      POSTGRES_DB: broadcast_bot
     ports:
       - '3009:5432'
     volumes:
