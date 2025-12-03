@@ -537,6 +537,7 @@ Here you can create and broadcast messages to community groups\\.
       flow: 'broadcast',
       step: 'creating_post',
       messages: [] as IPostMessage[],
+      broadcastTarget: { type: 'global' },
     });
 
     await ctx.reply(
