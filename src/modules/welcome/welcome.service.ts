@@ -99,7 +99,7 @@ export class WelcomeService {
 
       const groupList = groups
         .slice(0, 50) // Limit to first 50 groups
-        .map((g, i) => `${i + 1}\\. ${this.escapeMarkdown(g.name)}`)
+        .map((g, i) => `${i + 1}\\. ${this.escapeMarkdown(g.name ?? 'Unnamed Group')}`)
         .join('\n');
 
       const totalGroups = groups.length;
