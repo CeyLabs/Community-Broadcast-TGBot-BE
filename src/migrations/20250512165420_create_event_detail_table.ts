@@ -9,7 +9,7 @@ export async function up(knex: Knex): Promise<void> {
       .string('group_id')
       .notNullable()
       .references('group_id')
-      .inTable('city')
+      .inTable('group')
       .onDelete('CASCADE');
     table.boolean('is_one_person').notNullable().defaultTo(true);
     table.string('name');

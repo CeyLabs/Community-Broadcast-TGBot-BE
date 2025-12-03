@@ -3,11 +3,11 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16.3
-    container_name: postgres
+    container_name: cmnisal_postgres
     environment:
-      POSTGRES_USER: pizzadao
-      POSTGRES_PASSWORD: pizzadao
-      POSTGRES_DB: pizzadao
+      POSTGRES_USER: cmnisal
+      POSTGRES_PASSWORD: cmnisal
+      POSTGRES_DB: cmnisal
     ports:
       - '3009:5432'
     volumes:

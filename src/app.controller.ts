@@ -1,5 +1,5 @@
 /**
- * @fileoverview Root controller for the PizzaDao MoltoBene Telegram Bot
+ * @fileoverview Root controller for the Community Broadcast Telegram Bot
  * @module app.controller
  */
 

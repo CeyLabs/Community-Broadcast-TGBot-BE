@@ -10,14 +10,11 @@ import { IUser } from './user.interface';
 /**
  * Service for managing user-related operations
  * @class UserService
- * @description Handles user data management, registration, and queries
+ * @description Handles user data management and queries
  */
 @Injectable()
 export class UserService {
   constructor(private readonly knexService: KnexService) {}
-
-  /** Set of registered user IDs */
-  private registeredUsers = new Set<number>();
 
   /**
    * Adds a new user to the database
@@ -54,14 +51,6 @@ export class UserService {
   }
 
   /**
-   * Gets the set of all registered user IDs
-   * @returns {Set<number>} Set of registered user IDs
-   */
-  getAllRegisteredUsers(): Set<number> {
-    return this.registeredUsers;
-  }
-
-  /**
    * Finds a user by their Telegram ID
    * @param {string} userId - The Telegram user ID to find
    * @returns {Promise<IUser | undefined>} The found user or undefined
@@ -85,38 +74,42 @@ export class UserService {
   }
 
   /**
-   * Retrieves all regions from the database
-   * @returns {Promise<{ id: string; name: string }[]>} Array of region objects
+   * Creates or updates a user in the database
+   * @param {Partial<IUser>} userData - The user data to upsert
+   * @returns {Promise<IUser>} The created or updated user
    */
-  async getAllRegions(): Promise<{ id: string; name: string }[]> {
-    return this.knexService.knex('region').select('id', 'name');
-  }
+  async upsertUser(userData: {
+    telegram_id: string;
+    telegram_username?: string;
+    telegram_name?: string;
+  }): Promise<IUser> {
+    const existingUser = await this.findUser(userData.telegram_id);
 
-  /**
-   * Checks if a pizza name already exists in the database
-   * @param {string} pizzaName - The pizza name to check
-   * @returns {Promise<boolean>} True if the pizza name exists
-   */
-  async isPizzaNameExists(pizzaName: string): Promise<boolean> {
-    const existingPizzaName: IUser | undefined = await this.knexService
-      .knex<IUser>('user')
-      .where('pizza_name', pizzaName)
-      .first();
-
-    return !!existingPizzaName;
-  }
-
-  /**
-   * Checks if a Discord username already exists in the database
-   * @param {string} discordName - The Discord username to check
-   * @returns {Promise<boolean>} True if the Discord username exists
-   */
-  async isDiscordNameExists(discordName: string): Promise<boolean> {
-    const existingDiscordName: IUser | undefined = await this.knexService
-      .knex<IUser>('user')
-      .where('discord_name', discordName)
-      .first();
-
-    return !!existingDiscordName;
+    if (existingUser) {
+      // Update existing user
+      await this.knexService
+        .knex('user')
+        .where({ telegram_id: userData.telegram_id })
+        .update({
+          username: userData.telegram_username,
+          tg_first_name: userData.telegram_name,
+          updated_at: new Date(),
+        });
+      return {
+        ...existingUser,
+        username: userData.telegram_username ?? existingUser.username,
+        tg_first_name: userData.telegram_name ?? existingUser.tg_first_name,
+      };
+    } else {
+      // Create new user
+      const newUser: Partial<IUser> = {
+        telegram_id: userData.telegram_id,
+        username: userData.telegram_username ?? null,
+        tg_first_name: userData.telegram_name ?? null,
+        tg_last_name: null,
+      };
+      await this.knexService.knex<IUser>('user').insert(newUser);
+      return newUser as IUser;
+    }
   }
 }

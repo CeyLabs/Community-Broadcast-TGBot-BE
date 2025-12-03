@@ -16,7 +16,7 @@ export async function up(knex: Knex): Promise<void> {
       .string('group_id')
       .notNullable()
       .references('group_id')
-      .inTable('city')
+      .inTable('group')
       .onDelete('CASCADE');
     table.boolean('is_sent').notNullable().defaultTo(false);
     table.timestamp('sent_at').defaultTo(knex.fn.now());
@@ -24,6 +24,5 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
-  // Then drop the table
   await knex.schema.dropTableIfExists(tableName);
 }

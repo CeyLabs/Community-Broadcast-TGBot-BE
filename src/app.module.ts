@@ -1,5 +1,5 @@
 /**
- * @fileoverview Root module of the PizzaDao MoltoBene Telegram Bot application
+ * @fileoverview Root module of the Community Broadcast Telegram Bot application
  * @module app.module
  */
 
@@ -12,8 +12,7 @@ import { AppController } from './app.controller';
 import { KnexModule } from './modules/knex/knex.module';
 import { WelcomeModule } from './modules/welcome/welcome.module';
 import { UserModule } from './modules/user/user.module';
-import { CountryModule } from './modules/country/country.module';
-import { CityModule } from './modules/city/city.module';
+import { GroupModule } from './modules/group/group.module';
 import { CommonModule } from './modules/common/common.module';
 import { PrivateChatMiddleware } from './middleware/chat-type.middleware';
 import { BroadcastModule } from './modules/broadcast/broadcast.module';
@@ -60,8 +59,7 @@ config();
     BroadcastModule,
     CommonModule,
     KnexModule,
-    CountryModule,
-    CityModule,
+    GroupModule,
     EventDetailModule,
   ],
 

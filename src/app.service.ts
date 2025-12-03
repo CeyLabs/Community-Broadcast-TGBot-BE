@@ -1,5 +1,5 @@
 /**
- * @fileoverview Root service for the PizzaDao MoltoBene Telegram Bot
+ * @fileoverview Root service for the Community Broadcast Telegram Bot
  * @module app.service
  */
 

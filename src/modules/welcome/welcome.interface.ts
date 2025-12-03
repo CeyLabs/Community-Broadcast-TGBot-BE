@@ -3,18 +3,17 @@
  * @module welcome.interface
  */
 
-import { IUser } from '../user/user.interface';
-
 /**
- * Interface for user registration data
- * @interface IUserRegistrationData
- * @extends {IUser}
- * @description Extends the base user interface with additional fields
- * specific to the registration process
+ * Interface for basic user data used in welcome flow
+ * @interface IWelcomeUser
  */
-export interface IUserRegistrationData extends IUser {
-  /** Optional group ID where the user is registering from */
-  group_id?: string | number | null;
-  /** Optional region ID associated with the user's location */
-  region_id?: string | null;
+export interface IWelcomeUser {
+  /** User's Telegram ID */
+  telegram_id: string;
+  /** User's username */
+  username?: string | null;
+  /** User's first name */
+  first_name?: string | null;
+  /** User's last name */
+  last_name?: string | null;
 }

@@ -1,19 +1,18 @@
 import type { Knex } from 'knex';
 
-const tableName = 'country';
+const tableName = 'group';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(tableName, (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.string('name').notNullable();
-    table.uuid('region_id').notNullable().references('id').inTable('region').onDelete('CASCADE');
-    table.timestamps(true, true);
-
-    table.index('region_id', 'idx_country_region_id');
-    table.index('name', 'idx_country_name');
+    table.string('group_id').notNullable().unique();
+    table.string('telegram_link');
+    table.timestamp('created_at').defaultTo(knex.fn.now());
+    table.timestamp('updated_at').defaultTo(knex.fn.now());
   });
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.schema.dropTable(tableName);
+  await knex.schema.dropTableIfExists(tableName);
 }

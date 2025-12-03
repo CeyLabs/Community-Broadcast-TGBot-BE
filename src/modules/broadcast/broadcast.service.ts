@@ -13,17 +13,14 @@ import { Context } from 'telegraf';
 import { Command, Ctx, On, Update } from 'nestjs-telegraf';
 import {
   InlineKeyboardButton,
-  InlineQueryResultArticle,
-  InputTextMessageContent,
-  KeyboardButton,
   Message,
   ReplyKeyboardMarkup,
 } from 'telegraf/typings/core/types/typegram';
 
-import { CountryService } from '../country/country.service';
-import { AccessService } from '../access/access.service';
 import { CommonService } from '../common/common.service';
 import { EventDetailService } from '../event-detail/event-detail.service';
+import { GroupService } from '../group/group.service';
+import { GroupCategory, IGroup, IGroupForVars } from '../group/group.interface';
 
 import {
   IBroadcastSession,
@@ -31,31 +28,25 @@ import {
   IBroadcast,
   IBroadcastMessageDetail,
 } from './broadcast.type';
-import { ICity, ICityForVars } from '../city/city.interface';
-import { CityService } from '../city/city.service';
-import { ICountry } from '../country/country.interface';
-import { IEventDetail } from '../event-detail/event-detail.interface';
-import { RegionService } from '../region/region.service';
 import { KnexService } from '../knex/knex.service';
 import { getContextTelegramUserId } from 'src/utils/context';
 import { TelegramLogger } from 'src/utils/telegram-logger';
+import { UserService } from '../user/user.service';
+import { IEventDetail } from '../event-detail/event-detail.interface';
 
 /**
  * Service for managing message broadcasting functionality
  * @class BroadcastService
- * @description Handles broadcasting messages to different channels and groups,
- * including message creation, media handling, and access control
+ * @description Handles broadcasting messages to all community groups
  */
 @Update()
 @Injectable()
 export class BroadcastService {
   constructor(
-    private readonly accessService: AccessService,
     private readonly eventDetailService: EventDetailService,
-    private readonly countryService: CountryService,
-    private readonly regionService: RegionService,
-    private readonly cityService: CityService,
+    private readonly groupService: GroupService,
     private readonly knexService: KnexService,
+    private readonly userService: UserService,
     @Inject(forwardRef(() => CommonService))
     private readonly commonService: CommonService,
   ) {}
@@ -76,324 +67,58 @@ export class BroadcastService {
       return;
     }
 
-    const accessRole = await this.accessService.getUserAccess(userId);
-    if (!accessRole || !accessRole.role) {
-      await TelegramLogger.info(`User denied access to broadcast - no role`, undefined, userId);
-      await ctx.reply(this.escapeMarkdown('❌ You do not have access to broadcast messages.'), {
+    // Check if user is an admin
+    const isAdmin = await this.isUserAdmin(userId);
+    if (!isAdmin) {
+      await TelegramLogger.info(`User denied access to broadcast - not an admin`, undefined, userId);
+      await ctx.reply(this.escapeMarkdown('❌ You do not have access to broadcast messages. Only admins can broadcast.'), {
         parse_mode: 'MarkdownV2',
       });
       return;
     }
 
-    await this.showBroadcastMenu(ctx, accessRole.role);
+    // Ensure the admin user exists in the database
+    await this.userService.upsertUser({
+      telegram_id: userId,
+      telegram_username: ctx.from?.username,
+      telegram_name: ctx.from?.first_name || 'Admin',
+    });
+
+    await this.showBroadcastMenu(ctx);
   }
 
   /**
-   * Handles inline query for city/country search
-   * @param {Context} ctx - The Telegraf context
-   * @returns {Promise<void>}
+   * Check if a user is an admin
+   * @param {string} userId - The user's Telegram ID
+   * @returns {Promise<boolean>} Whether the user is an admin
    */
-  @On('inline_query')
-  async handleInlineQuery(@Ctx() ctx: Context): Promise<void> {
-    const userId = getContextTelegramUserId(ctx);
-
-    const query = ctx.inlineQuery?.query?.trim();
-    const offset = parseInt(ctx.inlineQuery?.offset || '0', 10);
-    const itemsPerPage = 10;
-
-    if (!userId) {
-      await TelegramLogger.warning(`Inline query received but userId is undefined`, undefined);
-      await ctx.answerInlineQuery([], { cache_time: 1 });
-      return;
-    }
-
-    const currentSession = await this.commonService.getUserState(Number(userId));
-    const searchType = currentSession?.searchType || 'city'; // Default to city search
-
-    if (searchType === 'country') {
-      let allCountries: ICountry[] = [];
-
-      // Fetch all countries based on user access
-      const accessInfo = await this.accessService.getUserAccess(String(userId));
-      if (!accessInfo) {
-        await ctx.answerInlineQuery([], { cache_time: 1 });
-        return;
-      }
-
-      if (accessInfo.role === 'admin') {
-        // Admin can access all countries
-        allCountries = accessInfo.country_data.map((access) => ({
-          id: access.country_id,
-          name: access.country_name,
-          region_id: access.region_id,
-        }));
-      } else if (accessInfo.role === 'underboss') {
-        // Underboss can access countries in their regions
-        const countryPromises = accessInfo.region_data.map((access) =>
-          this.countryService.getCountriesByRegion(access.region_id),
-        );
-        const countriesArrays = await Promise.all(countryPromises);
-        allCountries = countriesArrays.flat();
-        // Remove duplicates
-        allCountries = allCountries.filter(
-          (country, index, self) => index === self.findIndex((c) => c.id === country.id),
-        );
-      } else if (accessInfo.role === 'caporegime') {
-        // Caporegime can only access their assigned countries
-        const countryIds = accessInfo.country_data.map((access) => access.country_id);
-        const countryPromises = countryIds.map((countryId) =>
-          this.countryService.getCountryById(countryId),
-        );
-        const countries = await Promise.all(countryPromises);
-        allCountries = countries.filter((country): country is ICountry => country !== null);
-      }
-
-      const session: { [key: string]: any } =
-        (await this.commonService.getUserState(Number(userId))) || {};
-      session.flow = 'broadcast';
-      session.searchType = 'country';
-      await this.commonService.setUserState(Number(userId), session);
-
-      // Filter countries - if no query, show all accessible countries
-      const filteredCountries: ICountry[] = query
-        ? allCountries.filter((country: ICountry) =>
-            country.name.toLowerCase().includes(query.toLowerCase()),
-          )
-        : allCountries;
-
-      // Apply pagination
-      const startIndex = offset;
-      const endIndex = startIndex + itemsPerPage;
-      const paginatedCountries = filteredCountries.slice(startIndex, endIndex);
-      const hasMore = endIndex < filteredCountries.length;
-      const nextOffset = hasMore ? endIndex.toString() : '';
-
-      // Fetch region names for each paginated country
-      const regionNames: string[] = await Promise.all(
-        paginatedCountries.map(async (country: ICountry) => {
-          try {
-            if (country.region_id) {
-              const region = await this.regionService.getRegionById(String(country.region_id));
-              return region?.name || '';
-            }
-
-            const fullCountry = await this.countryService.getCountryById(String(country.id));
-            if (fullCountry && fullCountry.region_id) {
-              const region = await this.regionService.getRegionById(String(fullCountry.region_id));
-              return region?.name || '';
-            }
-
-            return '';
-          } catch (error) {
-            await TelegramLogger.error(
-              `Error fetching region for country ${country.name}.`,
-              error,
-              userId,
-            );
-            return '';
-          }
-        }),
-      );
-
-      const results: InlineQueryResultArticle[] = paginatedCountries.map(
-        (country: ICountry, idx: number): InlineQueryResultArticle => ({
-          type: 'article',
-          id: String(country.id) || country.name,
-          title: country.name,
-          description: regionNames[idx] || 'Select this country',
-          thumbnail_url: process.env.EVENT_IMAGE_URL,
-          input_message_content: {
-            message_text: `You selected *${this.escapeMarkdown(country.name)}*\\.\n\nPlease confirm your selection\\.`,
-            parse_mode: 'MarkdownV2',
-          } as InputTextMessageContent,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '✅ Confirm',
-                  callback_data: `confirm_country_${country.id}`,
-                },
-                {
-                  text: '❌ Cancel',
-                  callback_data: `cancel`,
-                },
-              ],
-            ],
-          },
-        }),
-      );
-
-      // Save selected country details in session
-      const selectedCountry = paginatedCountries.map((country) => ({
-        id: String(country.id),
-        name: country.name,
-      }));
-
-      await this.commonService.setUserState(Number(userId), {
-        ...(await this.commonService.getUserState(Number(userId))),
-        selectedCountry,
-      });
-
-      await ctx.answerInlineQuery(results, {
-        cache_time: 0,
-        next_offset: nextOffset,
-      });
-      return;
-    }
-
-    let allCities: ICity[] = [];
-
-    // Fetch cities based on user access and role
-    const accessInfo = await this.accessService.getUserAccess(String(userId));
-    if (!accessInfo) {
-      await ctx.answerInlineQuery([], { cache_time: 1 });
-      return;
-    }
-
-    if (accessInfo.role === 'admin') {
-      // Admin can access all cities
-      allCities = await this.cityService.getAllCities();
-    } else if (accessInfo.role === 'underboss') {
-      // Underboss can only access cities in their regions
-      const cityPromises = accessInfo.region_data.map((access) =>
-        this.cityService.getCitiesByRegionId(access.region_id),
-      );
-      const citiesArrays = await Promise.all(cityPromises);
-      const regionCities = citiesArrays.flat();
-
-      // Convert to ICity format
-      allCities = regionCities.map((city) => ({
-        id: city.id,
-        name: city.name,
-        group_id: city.group_id,
-        telegram_link: city.telegram_link,
-        country_id: '', // Will be fetched if needed
-      })) as ICity[];
-    } else if (accessInfo.role === 'caporegime') {
-      // Caporegime can access cities in their countries
-      const cityPromises = accessInfo.country_data.map((access) =>
-        this.cityService.getCitiesByCountry(access.country_id),
-      );
-      const citiesArrays = await Promise.all(cityPromises);
-      allCities = citiesArrays.flat();
-    } else if (accessInfo.role === 'host') {
-      // Host can only access their assigned cities
-      allCities = accessInfo.city_data.map((city) => ({
-        id: city.city_id,
-        name: city.city_name,
-        group_id: city.group_id,
-        telegram_link: city.telegram_link,
-        country_id: city.country_id,
-      })) as ICity[];
-    } else {
-      // Fallback for non-array userAccess (single access object)
-      allCities = await this.cityService.getAllCities();
-    }
-
-    const session: { [key: string]: any } =
-      (await this.commonService.getUserState(Number(userId))) || {};
-    session.flow = 'broadcast';
-    await this.commonService.setUserState(Number(userId), session);
-
-    // Filter cities - if no query, show all accessible cities
-    const filteredCities: ICity[] = query
-      ? allCities.filter((city: ICity) => city.name.toLowerCase().includes(query.toLowerCase()))
-      : allCities;
-
-    // Apply pagination
-    const startIndex = offset;
-    const endIndex = startIndex + itemsPerPage;
-    const paginatedCities = filteredCities.slice(startIndex, endIndex);
-    const hasMore = endIndex < filteredCities.length;
-    const nextOffset = hasMore ? endIndex.toString() : '';
-
-    // Fetch country names for each paginated city
-    const countryNames: string[] = await Promise.all(
-      paginatedCities.map(async (city: ICity) => {
-        // First try to get country_id from the city object
-        if (city.country_id) {
-          const country: ICountry | null = await this.countryService.getCountryById(
-            city.country_id,
-          );
-          return country?.name || '';
-        }
-
-        // If country_id is not available, try to get it using group_id
-        if (city.group_id) {
-          const countryName = await this.countryService.getCountryByGroupId(city.group_id);
-          return countryName || '';
-        }
-
-        return '';
-      }),
-    );
-
-    const results: InlineQueryResultArticle[] = paginatedCities.map(
-      (city: ICity, idx: number): InlineQueryResultArticle => ({
-        type: 'article',
-        id: city.id || city.name,
-        title: city.name,
-        description: countryNames[idx] || '',
-        thumbnail_url: process.env.EVENT_IMAGE_URL,
-        input_message_content: {
-          message_text: `You selected *${this.escapeMarkdown(city.name)}*\\.\n\nPlease confirm your selection\\.`,
-          parse_mode: 'MarkdownV2',
-        } as InputTextMessageContent,
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: '✅ Confirm',
-                callback_data: `confirm_city_${city.group_id ? city.group_id.replace(/^-/, '') : 'confirm_city_none'}`,
-              },
-              {
-                text: '❌ Cancel',
-                callback_data: `cancel`,
-              },
-            ],
-          ],
-        },
-      }),
-    );
-
-    // Save selected city details in selectedCity array in session
-    const selectedCity = paginatedCities.map((city, idx) => ({
-      id: city.id || city.name,
-      name: city.name,
-      country_name: countryNames[idx] || '',
-      group_id: city.group_id
-        ? city.group_id.startsWith('-')
-          ? city.group_id
-          : '-' + city.group_id
-        : '',
-    }));
-
-    await this.commonService.setUserState(Number(userId), {
-      ...(await this.commonService.getUserState(Number(userId))),
-      selectedCity,
-    });
-
-    await ctx.answerInlineQuery(results, {
-      cache_time: 0,
-      next_offset: nextOffset,
-    });
+  private async isUserAdmin(userId: string): Promise<boolean> {
+    const adminIds = process.env.ADMIN_IDS?.split(',').map(id => id.trim()) || [];
+    return adminIds.includes(userId);
   }
 
   /**
    * Displays the broadcast menu with available options
    * @param {Context} ctx - The Telegraf context
-   * @param {string} role - The user's role
    * @returns {Promise<void>}
    * @private
    */
-  private async showBroadcastMenu(ctx: Context, role: string): Promise<void> {
+  private async showBroadcastMenu(ctx: Context): Promise<void> {
     try {
-      const welcomeMessage = `Hello there *${role.charAt(0).toUpperCase() + role.slice(1)}* 👋
-Here you can create rich posts, set Variables, and invite new Admins\\.
+      const globalCount = await this.groupService.getGroupCount();
+      const sriLankaCount = await this.groupService.getGroupCountByCategory(GroupCategory.SRI_LANKA);
+      const vipCount = await this.groupService.getGroupCountByCategory(GroupCategory.VIP);
+      
+      const welcomeMessage = `Hello *Admin* 👋
+Here you can create and broadcast messages to community groups\\.
+
+📊 *Group Statistics:*
+• 🌍 Global: ${globalCount} groups \\(all groups\\)
+• 🇱🇰 Sri Lanka: ${sriLankaCount} groups
+• ⭐ VIP: ${vipCount} groups
 
 *You can use the following variables in your broadcast messages:*\n
->\\- \`\\{city\\}\` — City name
->\\- \`\\{country\\}\` — Country name
+>\\- \`\\{group\\}\` — Group name
 >\\- \`\\{event\\_name\\}\` — Event name
 >\\- \`\\{start\\_date\\}\` — Event start date
 >\\- \`\\{end\\_date\\}\` — Event end date
@@ -405,29 +130,22 @@ Here you can create rich posts, set Variables, and invite new Admins\\.
 >\\- \`\\{year\\}\` — Event year
 >\\- \`\\{unlock\\_link\\}\` — Unlock Protocol link\n
 
-*Example usage:*
-Hello \`\\{city\\}\` Pizza DAO members,
-We have an upcoming Pizza Day at \`\\{venue\\}\` on \`\\{start_date\\}\` from \`\\{start\\_time\\}\` to \`\\{end\\_time\\}\`\\.
-
-You can register via: \`\\{unlock\\_link\\}\`
+*Select a category to broadcast:*
 `;
 
       await ctx.reply(welcomeMessage, {
         parse_mode: 'MarkdownV2',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '📝 Create Post', callback_data: 'create_post' }],
-            [
-              { text: '⏰ Scheduled Posts', callback_data: 'scheduled_posts' },
-              { text: '✏️ Edit Post', callback_data: 'broadcast_edit_post' },
-            ],
-            [{ text: '⚙️ Settings', callback_data: 'settings' }],
+            [{ text: `🌍 Global (${globalCount} groups)`, callback_data: 'category_global' }],
+            [{ text: `🇱🇰 Sri Lanka (${sriLankaCount} groups)`, callback_data: 'category_sri_lanka' }],
+            [{ text: `⭐ VIP (${vipCount} groups)`, callback_data: 'category_vip' }],
           ],
         },
       });
     } catch (error) {
       await TelegramLogger.error(`Error displaying broadcast menu.`, error);
-      await ctx.reply(this.escapeMarkdown('❌ Failed to display post creation interface.'), {
+      await ctx.reply(this.escapeMarkdown('❌ Failed to display broadcast interface.'), {
         parse_mode: 'MarkdownV2',
       });
     }
@@ -450,110 +168,14 @@ You can register via: \`\\{unlock\\_link\\}\`
       return;
     }
 
+    // Handle category selection
+    if (callbackData.startsWith('category_')) {
+      await this.handleCategorySelection(ctx, callbackData);
+      return;
+    }
+
     if (callbackData === 'create_post') {
       await this.handleCreatePost(ctx);
-      return;
-    }
-
-    if (['scheduled_posts', 'broadcast_edit_post', 'settings'].includes(callbackData)) {
-      await TelegramLogger.info(
-        '🚧 User clicked on a feature under construction',
-        undefined,
-        userId,
-      );
-      await ctx.reply('This feature is under construction 🚧');
-      return;
-    }
-
-    if (callbackData.startsWith('broadcast_')) {
-      await this.handleBroadcastSelection(ctx, callbackData);
-      return;
-    }
-
-    if (callbackData.startsWith('confirm_country_')) {
-      const countryId = callbackData.replace('confirm_country_', '');
-      const session = await this.commonService.getUserState(Number(userId));
-      if (!session) {
-        await ctx.answerCbQuery('❌ No active session found\\.');
-        return;
-      }
-
-      const selectedCountry = session.selectedCountry as Array<{ id?: string; name?: string }>;
-
-      if (!selectedCountry || !Array.isArray(selectedCountry)) {
-        await ctx.answerCbQuery(this.escapeMarkdown('❌ Country not found in session.'));
-        return;
-      }
-
-      // Fetch all cities for this country
-      const cities = await this.cityService.getCitiesByCountry(countryId);
-
-      await this.commonService.setUserState(Number(userId), {
-        step: 'creating_post',
-        ...session,
-        selectedCountry: [
-          {
-            ...selectedCountry[0],
-            cities: cities,
-          },
-        ],
-        targetType: 'country',
-        targetId: countryId,
-      });
-
-      await ctx.telegram.sendMessage(
-        userId,
-        `📢 You are broadcasting to all cities in *${this.escapeMarkdown(selectedCountry[0]?.name || 'Unknown Country')}*\\.\n\n` +
-          `This will send messages to *${cities.length}* cities\\.\n\n` +
-          `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
-          `You can use variables with below format within curly brackets\\.\n\n` +
-          `*Eg:*\n` +
-          `Hello \`\\{city\\}\` Pizza DAO members in \`\\{country\\}\`,\n` +
-          `We have Upcoming Pizza Day on \`\\{location\\}\` at \`\\{start\\_time\\}\`\\.\n\n` +
-          `You can register via \\- \`\\{unlock\\_link\\}\``,
-        {
-          parse_mode: 'MarkdownV2',
-          reply_markup: this.getKeyboardMarkup(),
-        },
-      );
-      return;
-    }
-
-    if (callbackData.startsWith('confirm_city_')) {
-      const session = await this.commonService.getUserState(Number(userId));
-      if (!session) {
-        await ctx.answerCbQuery('❌ No active session found\\.');
-        return;
-      }
-
-      const selectedCity = session.selectedCity as Array<{ name?: string }>;
-
-      if (!selectedCity || !Array.isArray(selectedCity)) {
-        await ctx.answerCbQuery(this.escapeMarkdown('❌ City not found in session.'));
-        return;
-      }
-
-      await this.commonService.setUserState(Number(userId), {
-        step: 'creating_post',
-        ...session,
-        selectedCity: selectedCity,
-      });
-
-      await ctx.telegram.sendMessage(
-        userId,
-        `📢 You are assigned as admin to *Pizza DAO*\\.\n\n` +
-          `City Name: *${selectedCity[0]?.name}*\n\n` +
-          `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
-          `You can use variables with below format within curly brackets\\.\n\n` +
-          `*Eg:*\n` +
-          `Hello \`\\{city\\}\` Pizza DAO members,\n` +
-          `We have Upcoming Pizza Day on \`\\{location\\}\` at \`\\{start\\_time\\}\`\\.\n\n` +
-          `You can register via \\- \`\\{unlock\\_link\\}\``,
-        {
-          parse_mode: 'MarkdownV2',
-          reply_markup: this.getKeyboardMarkup(),
-        },
-      );
       return;
     }
 
@@ -562,53 +184,77 @@ You can register via: \`\\{unlock\\_link\\}\`
       return;
     }
 
-    if (callbackData.startsWith('select_region_')) {
-      const regionId = callbackData.split('_')[2];
-      await this.handleRegionSelection(ctx, regionId);
-      return;
-    }
-
     await ctx.answerCbQuery();
   }
 
   /**
-   * Handles region selection from inline keyboard
+   * Handles category selection for broadcast targeting
    * @param {Context} ctx - The Telegraf context
-   * @param {string} regionId - ID of the selected region
+   * @param {string} callbackData - The callback data containing the category
    * @returns {Promise<void>}
    * @private
    */
-  private async handleRegionSelection(ctx: Context, regionId: string): Promise<void> {
+  private async handleCategorySelection(ctx: Context, callbackData: string): Promise<void> {
     const userId = getContextTelegramUserId(ctx);
     if (!userId) return;
 
-    // delete the previous message
-    await ctx.deleteMessage();
+    const isAdmin = await this.isUserAdmin(userId);
+    if (!isAdmin) {
+      await ctx.answerCbQuery('❌ You do not have access to broadcast messages.');
+      return;
+    }
 
-    const region = await this.regionService.getRegionById(regionId);
-    const regionName = region ? region.name : 'Unknown Region';
+    let category: GroupCategory;
+    let categoryName: string;
+
+    switch (callbackData) {
+      case 'category_global':
+        category = GroupCategory.GLOBAL;
+        categoryName = '🌍 Global';
+        break;
+      case 'category_sri_lanka':
+        category = GroupCategory.SRI_LANKA;
+        categoryName = '🇱🇰 Sri Lanka';
+        break;
+      case 'category_vip':
+        category = GroupCategory.VIP;
+        categoryName = '⭐ VIP';
+        break;
+      default:
+        await ctx.answerCbQuery('❌ Invalid category');
+        return;
+    }
+
+    await ctx.deleteMessage().catch(() => {});
+
+    const groupCount = await this.groupService.getGroupCountByCategory(category);
 
     await this.commonService.setUserState(Number(userId), {
       flow: 'broadcast',
       step: 'creating_post',
-      messages: [],
-      targetType: 'region',
-      targetId: regionId,
+      messages: [] as IPostMessage[],
+      selectedCategory: category,
     });
 
     await ctx.reply(
-      `📢 You're broadcasting to all cities in *${regionName} region*\\.\n\n` +
-        `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
-        `You can use variables with below format within curly brackets\\.\n\n` +
-        `*Eg:*\n` +
-        `Hello \`\\{city\\}\` Pizza DAO members,\n` +
-        `We have Upcoming Pizza Day on \`\\{location\\}\` at \`\\{start\\_time\\}\`\\.\n\n` +
-        `You can register via \\- \`\\{unlock\\_link\\}\``,
+      this.escapeMarkdown(
+        `📢 Creating broadcast for ${categoryName} (${groupCount} groups)\n\n` +
+          `Please send me the content you want to broadcast.\n\n` +
+          `You can send:\n` +
+          `• Text messages\n` +
+          `• Photos with captions\n` +
+          `• Videos with captions\n` +
+          `• Documents\n` +
+          `• Animations (GIFs)\n\n` +
+          `Use the keyboard below to manage your broadcast.`,
+      ),
       {
         parse_mode: 'MarkdownV2',
         reply_markup: this.getKeyboardMarkup(),
       },
     );
+
+    await ctx.answerCbQuery();
   }
 
   /**
@@ -621,290 +267,37 @@ You can register via: \`\\{unlock\\_link\\}\`
     const userId = getContextTelegramUserId(ctx);
     if (!userId) return;
 
-    const accessInfo = await this.accessService.getUserAccess(userId);
-    if (!accessInfo) {
-      await TelegramLogger.error(
-        `User ${userId} attempted to create post without access`,
-        undefined,
-        userId,
-      );
+    const isAdmin = await this.isUserAdmin(userId);
+    if (!isAdmin) {
+      await ctx.reply(this.escapeMarkdown('❌ You do not have access to broadcast messages.'), {
+        parse_mode: 'MarkdownV2',
+      });
       return;
     }
 
-    await TelegramLogger.info(
-      `User ${userId} initiating post creation with role: ${accessInfo.role}`,
-      undefined,
-      userId,
-    );
-
     await ctx.deleteMessage().catch(() => {});
 
-    let message: string;
-    let inline_keyboard: InlineKeyboardButton[][] = [];
-    let default_keyboard: KeyboardButton[][] = [];
+    const groupCount = await this.groupService.getGroupCount();
 
-    switch (accessInfo.role) {
-      case 'admin':
-        message = `You're assigned as *Super Admin* to all the Pizza DAO chats\\. Select a Specific Group\\(s\\) to send the Broadcast Message\\.`;
-        inline_keyboard = [
-          [
-            { text: '🌍 All City Chats', callback_data: 'broadcast_all_cities' },
-            { text: '📍 Specific Region', callback_data: 'broadcast_specific_region' },
-          ],
-          [
-            { text: '🌐 Specific Country', callback_data: 'broadcast_specific_country' },
-            { text: '🏙️ Specific City', callback_data: 'broadcast_specific_city' },
-          ],
-        ];
-        break;
-
-      case 'underboss': {
-        const regionNames = accessInfo.region_data.map((region) => region.region_name).join(', ');
-        message = `You're assigned as *Underboss* to all the *${this.escapeMarkdown(regionNames)}* Pizza DAO chat\\(s\\)\\. Select a Specific Group\\(s\\) to send the Broadcast Message\\.`;
-        inline_keyboard = [
-          [
-            { text: '🏙️ Specific City', callback_data: 'broadcast_underboss_city' },
-            { text: '🌐 Specific Country', callback_data: 'broadcast_underboss_country' },
-          ],
-          [
-            {
-              text: `All City Chats in ${regionNames} region(s)`,
-              callback_data: 'broadcast_all_region_cities',
-            },
-          ],
-        ];
-        break;
-      }
-
-      case 'host': {
-        const citynames = accessInfo.city_data.map((region) => region.city_name).join(', ');
-
-        await this.commonService.setUserState(Number(ctx.from?.id), {
-          flow: 'broadcast',
-          step: `creating_post`,
-          messages: [] as IPostMessage[],
-        });
-
-        message = `You're assigned as *Host* to *${this.escapeMarkdown(citynames)}* Pizza DAO chat\\(s\\)\\. Select an option below
-\nSend me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.`;
-        default_keyboard = this.getKeyboardMarkup().keyboard;
-        break;
-      }
-
-      case 'caporegime': {
-        const countryNames = accessInfo.country_data
-          .map((region) => region.country_name)
-          .join(', ');
-        message = `You're assigned as *Caporegime* to *${this.escapeMarkdown(countryNames)}* Pizza DAO chat\\(s\\)\\. Select a Specific Group\\(s\\) to send the Broadcast Message\\.`;
-        inline_keyboard = [
-          [
-            { text: '🏙️ Specific City', callback_data: 'broadcast_caporegime_city' },
-            { text: '🌐 Specific Country', callback_data: 'broadcast_caporegime_country' },
-          ],
-          [
-            {
-              text: `All City Chats in ${countryNames}`,
-              callback_data: 'broadcast_all_caporegime_cities',
-            },
-          ],
-        ];
-        break;
-      }
-
-      default:
-        await ctx.reply(this.escapeMarkdown('❌ You do not have access to broadcast messages.'), {
-          parse_mode: 'MarkdownV2',
-        });
-        return;
-    }
-
-    await ctx.reply(message, {
-      parse_mode: 'MarkdownV2',
-      ...(inline_keyboard.length > 0
-        ? { reply_markup: { inline_keyboard } }
-        : default_keyboard.length > 0
-          ? {
-              reply_markup: {
-                keyboard: default_keyboard,
-                resize_keyboard: true,
-                one_time_keyboard: true,
-              },
-            }
-          : {}),
+    await this.commonService.setUserState(Number(userId), {
+      flow: 'broadcast',
+      step: 'creating_post',
+      messages: [] as IPostMessage[],
     });
-  }
 
-  /**
-   * Handles broadcast selection based on user role and callback data
-   * @param {Context} ctx - The Telegraf context
-   * @param {string} callbackData - The callback data from the inline keyboard
-   * @returns {Promise<void>}
-   * @private
-   */
-  private async handleBroadcastSelection(ctx: Context, callbackData: string): Promise<void> {
-    try {
-      if (!ctx.from?.id) {
-        await ctx.answerCbQuery(this.escapeMarkdown('❌ User ID not found'));
-        return;
-      }
-
-      const userId = getContextTelegramUserId(ctx);
-      if (!userId) return;
-
-      if (callbackData === 'broadcast_all_cities') {
-        await this.commonService.setUserState(Number(userId), {
-          flow: 'broadcast',
-          step: `creating_post`,
-          messages: [] as IPostMessage[],
-        });
-
-        await ctx.reply(
-          `📢 You're assigned as admin to *All Pizza DAO* chats\\.\n\n` +
-            `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
-            `You can use variables with below format within curly brackets\\.\n\n` +
-            `*Eg:*\n` +
-            `Hello \\{city\\} Pizza DAO members,\n` +
-            `We have Upcoming Pizza Day on \\{location\\} at \\{start\\_time\\}\\.\n\n` +
-            `You can register via \\- \\{unlock\\_link\\}`,
-
-          {
-            parse_mode: 'MarkdownV2',
-            reply_markup: this.getKeyboardMarkup(),
-          },
-        );
-      } else if (
-        callbackData === 'broadcast_specific_country' ||
-        callbackData === 'broadcast_underboss_country' ||
-        callbackData === 'broadcast_caporegime_country'
-      ) {
-        // Set search type to country
-        await this.commonService.setUserState(Number(userId), {
-          ...(await this.commonService.getUserState(Number(userId))),
-          searchType: 'country',
-        });
-
-        await ctx.deleteMessage();
-        await ctx.reply(
-          `You can use the inline mode to search for a country and send a message to all cities in that country\\.\n\n` +
-            `For example, type \`@${this.escapeMarkdown(process.env.BOT_USERNAME || 'MoltoBeneBot')}\` and the country name in the message field\\.`,
-          {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: '🔍 Search Country',
-                    switch_inline_query_current_chat: '',
-                  },
-                ],
-              ],
-            },
-          },
-        );
-      } else if (
-        callbackData === 'broadcast_specific_city' ||
-        callbackData === 'broadcast_underboss_city' ||
-        callbackData === 'broadcast_caporegime_city'
-      ) {
-        // Set search type back to city and clear cached cities to force re-fetch based on user role
-        await this.commonService.setUserState(Number(userId), {
-          ...(await this.commonService.getUserState(Number(userId))),
-          searchType: 'city',
-          allCities: [], // Clear cached cities
-        });
-
-        await ctx.deleteMessage();
-        await ctx.reply(
-          `You can use the inline mode to search for a city and send a message directly\\.\n\n` +
-            `For example, type \`@${this.escapeMarkdown(process.env.BOT_USERNAME || 'MoltoBeneBot')}\` and the city name in the message field\\.`,
-          {
-            parse_mode: 'MarkdownV2',
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: '🔍 Search City',
-                    switch_inline_query_current_chat: '',
-                  },
-                ],
-              ],
-            },
-          },
-        );
-      } else if (callbackData === 'broadcast_specific_region') {
-        const regions = await this.regionService.getAllRegions();
-        if (regions.length === 0) {
-          await ctx.reply('No regions found.');
-          return;
-        }
-        const regionButtons = this.createRegionButtons(regions);
-        await ctx.deleteMessage();
-        await ctx.reply('Select a region to broadcast to:', {
-          reply_markup: { inline_keyboard: regionButtons },
-        });
-      } else if (callbackData === 'broadcast_all_region_cities') {
-        const accessInfo = await this.accessService.getUserAccess(String(userId));
-        if (!accessInfo || !accessInfo.region_data || accessInfo.region_data.length === 0) return;
-
-        const regionId = accessInfo.region_data[0].region_id;
-        if (!regionId) return;
-
-        await this.commonService.setUserState(Number(userId), {
-          flow: 'broadcast',
-          step: 'creating_post',
-          messages: [],
-          targetType: 'region',
-          targetId: regionId,
-        });
-
-        await ctx.deleteMessage();
-        await ctx.reply(
-          `📢 You're broadcasting to all cities in your region\\.\n\n` +
-            `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
-            `You can use variables with below format within curly brackets\\.\n\n` +
-            `*Eg:*\n` +
-            `Hello \\{city\\} Pizza DAO members,\n` +
-            `We have Upcoming Pizza Day on \\{location\\} at \\{start\\_time\\}\\.\n\n` +
-            `You can register via \\- \\{unlock\\_link\\}`,
-          {
-            parse_mode: 'MarkdownV2',
-            reply_markup: this.getKeyboardMarkup(),
-          },
-        );
-      } else if (callbackData === 'broadcast_all_caporegime_cities') {
-        const userAccess = await this.accessService.getUserAccess(String(userId));
-        if (!userAccess || !userAccess.country_data || userAccess.country_data.length === 0) return;
-
-        const countryId = userAccess.country_data[0].country_id;
-        if (!countryId) return;
-
-        await this.commonService.setUserState(Number(userId), {
-          flow: 'broadcast',
-          step: 'creating_post',
-          messages: [],
-          targetType: 'country',
-          targetId: countryId,
-        });
-
-        await ctx.deleteMessage();
-        await ctx.reply(
-          `📢 You're broadcasting to all cities in your country\\.\n\n` +
-            `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
-            `You can use variables with below format within curly brackets\\.\n\n` +
-            `*Eg:*\n` +
-            `Hello \\{city\\} Pizza DAO members,\n` +
-            `We have Upcoming Pizza Day on \\{location\\} at \\{start\\_time\\}\\.\n\n` +
-            `You can register via \\- \\{unlock\\_link\\}`,
-          {
-            parse_mode: 'MarkdownV2',
-            reply_markup: this.getKeyboardMarkup(),
-          },
-        );
-      }
-    } catch (error) {
-      await TelegramLogger.error(`Error handling broadcast selection: ${callbackData}`, error);
-      await ctx.answerCbQuery(this.escapeMarkdown('❌ Error processing your request'));
-    }
+    await ctx.reply(
+      `📢 You're broadcasting to *${groupCount} community groups*\\.\n\n` +
+        `Send me one or multiple messages you want to include in the post\\. It can be anything — a text, photo, video, even a sticker\\.\n\n` +
+        `You can use variables with below format within curly brackets\\.\n\n` +
+        `*Eg:*\n` +
+        `Hello \\{group\\} members,\n` +
+        `We have an upcoming event on \\{location\\} at \\{start\\_time\\}\\.\n\n` +
+        `You can register via \\- \\{unlock\\_link\\}`,
+      {
+        parse_mode: 'MarkdownV2',
+        reply_markup: this.getKeyboardMarkup(),
+      },
+    );
   }
 
   /**
@@ -921,29 +314,6 @@ You can register via: \`\\{unlock\\_link\\}\`
       resize_keyboard: true,
       one_time_keyboard: true,
     };
-  }
-
-  /**
-   * Creates region keyboard buttons in a grid layout
-   * @param {Array<{id: string, name: string}>} regions - Array of region objects
-   * @returns {Array<Array<InlineKeyboardButton>>} Grid of keyboard buttons
-   * @private
-   */
-  private createRegionButtons(regions: { id: string; name: string }[]): InlineKeyboardButton[][] {
-    const buttons: InlineKeyboardButton[][] = [];
-    for (let i = 0; i < regions.length; i += 2) {
-      const row: InlineKeyboardButton[] = [
-        { text: regions[i].name, callback_data: `select_region_${regions[i].id}` },
-      ];
-      if (i + 1 < regions.length) {
-        row.push({
-          text: regions[i + 1].name,
-          callback_data: `select_region_${regions[i + 1].id}`,
-        });
-      }
-      buttons.push(row);
-    }
-    return buttons;
   }
 
   /**
@@ -1140,7 +510,7 @@ You can register via: \`\\{unlock\\_link\\}\`
   }
 
   /**
-   * Previews messages with variables replaced for a test city
+   * Previews messages with variables replaced for a test group
    * @param {Context} ctx - The Telegraf context
    * @param {IBroadcastSession} session - The current broadcast session
    * @returns {Promise<void>}
@@ -1153,22 +523,20 @@ You can register via: \`\\{unlock\\_link\\}\`
 
       await TelegramLogger.info(`Previewing messages for user`, undefined, userId);
 
-      const previewCity = {
-        city_name: 'Berlin',
-        group_id: '-1001751302723',
-        telegram_link: 'https://t.me/+cPd97vNeP6AxMzFi',
+      const previewGroup: IGroupForVars = {
+        group_name: 'Sample Community',
+        group_id: '-1001234567890',
+        telegram_link: 'https://t.me/samplecommunity',
       };
-      const countryName = 'Germany';
 
-      await ctx.reply(`🔍 *Preview for ${previewCity.city_name}:*`, {
+      await ctx.reply(`🔍 *Preview for ${this.escapeMarkdown(previewGroup.group_name)}:*`, {
         parse_mode: 'MarkdownV2',
       });
 
       for (const [index, message] of session.messages.entries()) {
         const processedText = await this.replaceVars(
           message.text ?? '',
-          countryName,
-          previewCity,
+          previewGroup,
           true,
         );
 
@@ -1264,7 +632,7 @@ You can register via: \`\\{unlock\\_link\\}\`
       }
 
       await ctx.reply(
-        `This post will be sent to your city or cities\\. Use the Send button to distribute it\\.\n\nNOTE: This is just a preview using ${this.escapeMarkdown(previewCity.city_name)} as an example city\\. The actual messages will have the appropriate city name for each group\\.`,
+        `This post will be sent to all community groups\\. Use the Send button to distribute it\\.\n\nNOTE: This is just a preview using ${this.escapeMarkdown(previewGroup.group_name)} as an example\\. The actual messages will have the appropriate group name for each group\\.`,
         {
           parse_mode: 'MarkdownV2',
           reply_markup: this.getKeyboardMarkup(),
@@ -1278,7 +646,7 @@ You can register via: \`\\{unlock\\_link\\}\`
   }
 
   /**
-   * Sends messages to all cities in the user's access list
+   * Sends messages to groups based on selected category
    * @param {Context} ctx - The Telegraf context
    * @param {IBroadcastSession} session - The current broadcast session
    * @returns {Promise<void>}
@@ -1293,96 +661,21 @@ You can register via: \`\\{unlock\\_link\\}\`
     let broadcastId: string;
 
     try {
-      let cityData: {
-        city_name: string;
-        group_id?: string | null;
-        telegram_link?: string | null;
-      }[] = [];
+      // Get groups based on selected category
+      const category = session.selectedCategory || GroupCategory.GLOBAL;
+      const groups = await this.groupService.getGroupsByCategory(category);
 
-      if (session.targetType === 'country') {
-        // Check if we have selectedCountry with cities already fetched
-        if (session.selectedCountry && session.selectedCountry.length > 0) {
-          const selectedCountry = session.selectedCountry[0];
-          if (selectedCountry.cities) {
-            // Use cities from selectedCountry if already fetched
-            cityData = selectedCountry.cities.map((city) => ({
-              city_name: city.name,
-              group_id: city.group_id,
-              telegram_link: city.telegram_link,
-            }));
-          } else if (session.targetId) {
-            // Fetch cities if not already in selectedCountry
-            const cities = await this.cityService.getCitiesByCountry(session.targetId);
-            cityData = cities.map((city) => ({
-              city_name: city.name,
-              group_id: city.group_id,
-              telegram_link: city.telegram_link,
-            }));
-          }
-        } else if (session.targetId) {
-          // Fetch all cities for the selected country using
-          const cities = await this.cityService.getCitiesByCountry(session.targetId);
-          cityData = cities.map((city) => ({
-            city_name: city.name,
-            group_id: city.group_id,
-            telegram_link: city.telegram_link,
-          }));
-        }
-      } else if (session.targetType === 'region' && session.targetId) {
-        const cities = await this.cityService.getCitiesByRegionId(session.targetId);
-        cityData = cities.map((city) => ({
-          city_name: city.name,
-          group_id: city.group_id,
-          telegram_link: city.telegram_link,
-        }));
-      } else if (session.targetType === 'all') {
-        const accessInfo = await this.accessService.getUserAccess(userId);
-        if (!accessInfo) return;
-        cityData = accessInfo.city_data.map((city) => ({
-          city_name: city.city_name,
-          group_id: city.group_id,
-          telegram_link: city.telegram_link,
-        }));
-      } else if (session.selectedCity) {
-        if (!Array.isArray(session.selectedCity) || session.selectedCity.length === 0) {
-          await ctx.reply(this.escapeMarkdown('❌ Invalid selected city data.'), {
-            parse_mode: 'MarkdownV2',
-          });
-          return;
-        }
+      const categoryName = this.getCategoryDisplayName(category);
 
-        const city = session.selectedCity[0];
-        cityData = [
-          {
-            city_name: city.name,
-            group_id: city.group_id,
-            telegram_link: city.telegram_link,
-          },
-        ];
-      } else {
-        // Default case: use user's access data
-        const accessInfo = await this.accessService.getUserAccess(userId);
-        if (!accessInfo) return;
-
-        cityData = accessInfo.city_data.map((city) => ({
-          city_name: city.city_name,
-          group_id: city.group_id,
-          telegram_link: city.telegram_link,
-        }));
-      }
-
-      // Filter out cities without group_id
-      cityData = cityData.filter((city) => city.group_id);
-
-      if (cityData.length === 0) {
-        await ctx.reply(this.escapeMarkdown('❌ No cities with valid group IDs found.'), {
+      if (groups.length === 0) {
+        await ctx.reply(this.escapeMarkdown(`❌ No groups found in ${categoryName} category.`), {
           parse_mode: 'MarkdownV2',
         });
         return;
       }
 
       await ctx.reply(
-        this.escapeMarkdown(`🚀 Starting to send messages to ${cityData.length} cities...`),
+        this.escapeMarkdown(`🚀 Starting to send messages to ${groups.length} groups (${categoryName})...`),
         {
           parse_mode: 'MarkdownV2',
         },
@@ -1404,9 +697,9 @@ You can register via: \`\\{unlock\\_link\\}\`
         // Send log file as csv
         const successEntries: string[] = [];
         const failureEntries: string[] = [];
-        let csvContent = 'City Name,Group ID,Status, Reason\n';
+        let csvContent = 'Group Name,Group ID,Status,Reason\n';
 
-        // Create a single broadcast record outside the city loop
+        // Create a single broadcast record outside the group loop
         const mediaType = message.mediaType || 'text';
         const broadcastRecord: IBroadcast = {
           message_type: mediaType,
@@ -1429,25 +722,29 @@ You can register via: \`\\{unlock\\_link\\}\`
           ...broadcastRecord,
         });
 
-        for (let i = 0; i < cityData.length; i++) {
-          const city = cityData[i];
+        for (let i = 0; i < groups.length; i++) {
+          const group = groups[i];
 
-          // Skip cities without group_id (double-check)
-          if (!city.group_id) {
+          // Skip groups without group_id
+          if (!group.group_id) {
             failureCount++;
-            await TelegramLogger.error(`❌ Failed: ${city.city_name} - No group ID`);
+            await TelegramLogger.error(`❌ Failed: ${group.name} - No group ID`);
             continue;
           }
 
-          const countryName = await this.countryService.getCountryByGroupId(city.group_id);
+          const groupForVars: IGroupForVars = {
+            group_name: group.name,
+            group_id: group.group_id,
+            telegram_link: group.telegram_link,
+          };
 
-          const processedText = await this.replaceVars(message.text ?? '', countryName, city);
+          const processedText = await this.replaceVars(message.text ?? '', groupForVars);
 
           const urlButtons: InlineKeyboardButton[][] = await Promise.all(
             message.urlButtons.map(async (btn) => [
               {
-                text: await this.replaceVars(btn.text, countryName, city),
-                url: await this.replaceVars(btn.url, countryName, city),
+                text: await this.replaceVars(btn.text, groupForVars),
+                url: await this.replaceVars(btn.url, groupForVars),
               },
             ]),
           );
@@ -1460,28 +757,28 @@ You can register via: \`\\{unlock\\_link\\}\`
             if (message.mediaType && message.mediaUrl) {
               switch (message.mediaType) {
                 case 'photo':
-                  sentMessage = await ctx.telegram.sendPhoto(city.group_id, message.mediaUrl, {
+                  sentMessage = await ctx.telegram.sendPhoto(group.group_id, message.mediaUrl, {
                     caption: this.escapeMarkdown(processedText ?? ''),
                     parse_mode: 'MarkdownV2',
                     reply_markup: replyMarkup,
                   });
                   break;
                 case 'video':
-                  sentMessage = await ctx.telegram.sendVideo(city.group_id, message.mediaUrl, {
+                  sentMessage = await ctx.telegram.sendVideo(group.group_id, message.mediaUrl, {
                     caption: this.escapeMarkdown(processedText ?? ''),
                     parse_mode: 'MarkdownV2',
                     reply_markup: replyMarkup,
                   });
                   break;
                 case 'document':
-                  sentMessage = await ctx.telegram.sendDocument(city.group_id, message.mediaUrl, {
+                  sentMessage = await ctx.telegram.sendDocument(group.group_id, message.mediaUrl, {
                     caption: this.escapeMarkdown(processedText ?? ''),
                     parse_mode: 'MarkdownV2',
                     reply_markup: replyMarkup,
                   });
                   break;
                 case 'animation':
-                  sentMessage = await ctx.telegram.sendAnimation(city.group_id, message.mediaUrl, {
+                  sentMessage = await ctx.telegram.sendAnimation(group.group_id, message.mediaUrl, {
                     caption: this.escapeMarkdown(processedText ?? ''),
                     parse_mode: 'MarkdownV2',
                     reply_markup: replyMarkup,
@@ -1489,7 +786,7 @@ You can register via: \`\\{unlock\\_link\\}\`
                   break;
                 default:
                   sentMessage = await ctx.telegram.sendMessage(
-                    city.group_id,
+                    group.group_id,
                     this.escapeMarkdown(processedText ?? ''),
                     {
                       parse_mode: 'MarkdownV2',
@@ -1499,7 +796,7 @@ You can register via: \`\\{unlock\\_link\\}\`
               }
             } else {
               sentMessage = await ctx.telegram.sendMessage(
-                city.group_id,
+                group.group_id,
                 this.escapeMarkdown(processedText ?? ''),
                 {
                   parse_mode: 'MarkdownV2',
@@ -1508,21 +805,21 @@ You can register via: \`\\{unlock\\_link\\}\`
               );
             }
 
-            // Escape any commas in the city name for CSV format
-            const escapedCityName = city.city_name.includes(',')
-              ? `"${city.city_name}"`
-              : city.city_name;
+            // Escape any commas in the group name for CSV format
+            const escapedGroupName = group.name.includes(',')
+              ? `"${group.name}"`
+              : group.name;
 
             if (message.isPinned) {
               try {
-                await ctx.telegram.pinChatMessage(city.group_id, sentMessage?.message_id ?? 0, {
+                await ctx.telegram.pinChatMessage(group.group_id, sentMessage?.message_id ?? 0, {
                   disable_notification: true,
                 });
               } catch (error) {
                 // Add pinning failure entry to CSV with error message
                 const errorMsg = String(error).replace(/"/g, '""');
                 successEntries.push(
-                  `${escapedCityName},${city.group_id || ''},Success (pin failed),"${errorMsg}"`,
+                  `${escapedGroupName},${group.group_id || ''},Success (pin failed),"${errorMsg}"`,
                 );
               }
             }
@@ -1531,41 +828,41 @@ You can register via: \`\\{unlock\\_link\\}\`
 
             if (
               successEntries.find((entry) =>
-                entry.startsWith(`${escapedCityName},${city.group_id || ''}`),
+                entry.startsWith(`${escapedGroupName},${group.group_id || ''}`),
               )
             ) {
               continue;
             }
 
             // Add to successful entries array
-            successEntries.push(`${escapedCityName},${city.group_id || ''},Success`);
+            successEntries.push(`${escapedGroupName},${group.group_id || ''},Success`);
 
             await this.saveMessageDetail(
               broadcastId,
               sentMessage.message_id?.toString(),
-              city,
+              group,
               true,
             );
           } catch (error) {
             failureCount++;
 
-            // Escape any commas in the city name for CSV format
-            const escapedCityName = city.city_name.includes(',')
-              ? `"${city.city_name}"`
-              : city.city_name;
+            // Escape any commas in the group name for CSV format
+            const escapedGroupName = group.name.includes(',')
+              ? `"${group.name}"`
+              : group.name;
 
             // Add failure entry to CSV with error message
             const errorMsg = String(error).replace(/"/g, '""');
-            failureEntries.push(`${escapedCityName},${city.group_id || ''},Failed,"${errorMsg}"`);
+            failureEntries.push(`${escapedGroupName},${group.group_id || ''},Failed,"${errorMsg}"`);
 
             // Save the failure in the message detail
-            await this.saveMessageDetail(broadcastId, undefined, city, false);
+            await this.saveMessageDetail(broadcastId, undefined, group, false);
           }
 
-          // Progress update every 10 cities or at the end
-          if ((i + 1) % 10 === 0 || i === cityData.length - 1) {
+          // Progress update every 10 groups or at the end
+          if ((i + 1) % 10 === 0 || i === groups.length - 1) {
             const progressText = this.escapeMarkdown(
-              `📊 Progress: ${i + 1}/${cityData.length} cities\n` +
+              `📊 Progress: ${i + 1}/${groups.length} groups\n` +
                 `✅ Success: ${successCount}\n❌ Failed: ${failureCount}`,
             );
             if (progressMsgId) {
@@ -1622,7 +919,7 @@ You can register via: \`\\{unlock\\_link\\}\`
             },
             {
               message_thread_id: Number(process.env.LOG_THREAD_ID) || undefined,
-              caption: `*📡 Broadcast ID*: \`${this.escapeMarkdown(broadcastId)}\`\n👨🏻‍💼 *Sent By*: ${this.escapeMarkdown(ctx.from?.first_name ?? 'Unknown')} [${ctx.from?.id}\n *🕒 Sent at*: ${this.escapeMarkdown(new Date().toLocaleString())}]`,
+              caption: `*📡 Broadcast ID*: \`${this.escapeMarkdown(broadcastId)}\`\n👨🏻‍💼 *Sent By*: ${this.escapeMarkdown(ctx.from?.first_name ?? 'Unknown')} [${ctx.from?.id}]\n*🕒 Sent at*: ${this.escapeMarkdown(new Date().toLocaleString())}`,
               parse_mode: 'MarkdownV2',
             },
           );
@@ -1908,7 +1205,7 @@ You can register via: \`\\{unlock\\_link\\}\`
 
       if (variableIncluded) {
         await ctx.reply(
-          '🔎 _Variables detected\\! Use "Preview" to see how they’ll be filled in the final broadcast\\._',
+          '🔎 _Variables detected\\! Use "Preview" to see how they will be filled in the final broadcast\\._',
           {
             parse_mode: 'MarkdownV2',
           },
@@ -2148,16 +1445,14 @@ You can register via: \`\\{unlock\\_link\\}\`
   /**
    * Replaces variables in text with actual values
    * @param {string} text - The text containing variables to replace
-   * @param {string|null} country - The country name
-   * @param {ICityForVars} city - The city information
+   * @param {IGroupForVars} group - The group information
    * @param {boolean} [hardcoded=false] - Whether to use hardcoded values for preview
    * @returns {Promise<string>} The text with variables replaced
    * @private
    */
   private async replaceVars(
     text: string,
-    country?: string | null,
-    city?: ICityForVars,
+    group?: IGroupForVars,
     hardcoded: boolean = false,
   ): Promise<string> {
     let event: IEventDetail | null;
@@ -2169,30 +1464,29 @@ You can register via: \`\\{unlock\\_link\\}\`
         group_id: '-1001751302723',
         is_one_person: false,
         image_url: 'https://storage.unlock-protocol.com/9816d29f-e6a7-43c3-96b6-b9f1708fc81c',
-        name: 'Berlin Bitcoin Pizza Party ',
-        start_date: '2025-05-22',
-        end_date: '2025-05-22',
+        name: 'Sample Community Event',
+        start_date: '2025-12-25',
+        end_date: '2025-12-25',
         start_time: '18:00',
         end_time: '21:00',
-        timezone: 'Europe/Berlin',
-        location: 'Berlin, Germany',
-        address: 'Berlin, Germany',
-        country: 'Germany',
-        unlock_link: `app.unlock-protocol.com/event/berlin-bitcoin-pizza-party-1`,
+        timezone: 'UTC',
+        location: 'Sample Location',
+        address: 'Sample Address',
+        country: 'Sample Country',
+        unlock_link: `app.unlock-protocol.com/event/sample-event`,
         year: 2025,
-        slug: 'berlin-bitcoin-pizza-party-1',
+        slug: 'sample-event',
       };
     } else {
       const currentYear = new Date().getFullYear();
       event = await this.eventDetailService.getEventByYearAndGroupId(
         currentYear,
-        city?.group_id ?? '',
+        group?.group_id ?? '',
       );
     }
 
     let result = text
-      .replace(/{city}/gi, city?.city_name ?? '')
-      .replace(/{country}/gi, country ?? '')
+      .replace(/{group}/gi, group?.group_name ?? '')
       .replace(/{event_name}/gi, event?.name ?? '')
       .replace(/{start_date}/gi, event?.start_date ?? '')
       .replace(/{end_date}/gi, event?.end_date ?? '')
@@ -2219,17 +1513,36 @@ You can register via: \`\\{unlock\\_link\\}\`
   }
 
   /**
+   * Gets the display name for a group category
+   * @param {GroupCategory} category - The category
+   * @returns {string} The display name
+   * @private
+   */
+  private getCategoryDisplayName(category: GroupCategory): string {
+    switch (category) {
+      case GroupCategory.GLOBAL:
+        return '🌍 Global';
+      case GroupCategory.SRI_LANKA:
+        return '🇱🇰 Sri Lanka';
+      case GroupCategory.VIP:
+        return '⭐ VIP';
+      default:
+        return category;
+    }
+  }
+
+  /**
    * Save broadcast message detail to the database
    * @param {string} broadcastId - The ID of the existing broadcast record
-   * @param {Message} sentMessage - The sent Telegram message
-   * @param {Object} city - The city the message was sent to
+   * @param {string | undefined} messageId - The message ID
+   * @param {IGroup} group - The group the message was sent to
    * @param {boolean} isSent - Whether the message was successfully sent
    * @private
    */
   private async saveMessageDetail(
     broadcastId: string,
     messageId: string | undefined,
-    city: { city_name: string; group_id?: string | null },
+    group: IGroup,
     isSent: boolean,
   ): Promise<void> {
     try {
@@ -2237,7 +1550,7 @@ You can register via: \`\\{unlock\\_link\\}\`
       await this.knexService.knex<IBroadcastMessageDetail>('broadcast_message_detail').insert({
         broadcast_id: broadcastId,
         message_id: messageId,
-        group_id: city.group_id || '',
+        group_id: group.group_id || '',
         is_sent: isSent,
       });
     } catch (error) {
