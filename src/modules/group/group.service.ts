@@ -6,7 +6,7 @@
 import RunCache from 'run-cache';
 import { Injectable } from '@nestjs/common';
 import { KnexService } from '../knex/knex.service';
-import { IGroup, IGroupWithHierarchy } from './group.interface';
+import { IGroup, IGroupWithHierarchy, ICreateGroup } from './group.interface';
 
 /**
  * Service for managing community group data and operations
@@ -267,10 +267,10 @@ export class GroupService {
 
   /**
    * Creates a new group
-   * @param {Partial<IGroup>} groupData - The group data to insert
+   * @param {ICreateGroup} groupData - The group data to insert (name and group_id required)
    * @returns {Promise<IGroup>} The created group
    */
-  async createGroup(groupData: Partial<IGroup>): Promise<IGroup> {
+  async createGroup(groupData: ICreateGroup): Promise<IGroup> {
     const [group] = await this.knexService.knex<IGroup>('group').insert(groupData).returning('*');
 
     // Clear cache

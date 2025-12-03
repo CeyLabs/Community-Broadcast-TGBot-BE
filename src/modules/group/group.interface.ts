@@ -48,6 +48,24 @@ export interface IGroupForVars {
 }
 
 /**
+ * Interface for creating a new group
+ * @interface ICreateGroup
+ * @description Defines the required and optional fields for creating a new group
+ */
+export interface ICreateGroup {
+  /** Display name of the group (required) */
+  name: string;
+  /** Telegram group ID (chat ID) (required) */
+  group_id: string;
+  /** Telegram invite link for the group (optional) */
+  telegram_link?: string;
+  /** Foreign key to subcategory table (optional) */
+  subcategory_id?: string | null;
+  /** Foreign key to group_category table (optional) */
+  group_category_id?: string | null;
+}
+
+/**
  * Interface for group with joined hierarchy information
  * @interface IGroupWithHierarchy
  */
