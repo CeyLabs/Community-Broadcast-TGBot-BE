@@ -273,8 +273,8 @@ export class GroupService {
   async createGroup(groupData: ICreateGroup): Promise<IGroup> {
     const [group] = await this.knexService.knex<IGroup>('group').insert(groupData).returning('*');
 
-    // Clear cache
-    await this.clearGroupCache();
+    // Clear cache including related subcategory/group_category caches
+    await this.clearGroupCache(group);
 
     return group;
   }
@@ -286,14 +286,18 @@ export class GroupService {
    * @returns {Promise<IGroup | undefined>} The updated group
    */
   async updateGroup(id: string, groupData: Partial<IGroup>): Promise<IGroup | undefined> {
+    // Get old group data to clear old relationship caches
+    const oldGroup = await this.getGroupById(id);
+
     const [group] = await this.knexService
       .knex<IGroup>('group')
       .where({ id })
       .update({ ...groupData, updated_at: new Date() })
       .returning('*');
 
-    // Clear cache
-    await this.clearGroupCache();
+    // Clear cache including both old and new relationship caches
+    await this.clearGroupCache(oldGroup);
+    await this.clearGroupCache(group);
     await RunCache.delete(`group:id:${id}`);
     if (group?.group_id) {
       await RunCache.delete(`group:group_id:${group.group_id}`);
@@ -311,8 +315,8 @@ export class GroupService {
     const group = await this.getGroupById(id);
     const deleted = await this.knexService.knex<IGroup>('group').where({ id }).delete();
 
-    // Clear cache
-    await this.clearGroupCache();
+    // Clear cache including related subcategory/group_category caches
+    await this.clearGroupCache(group);
     await RunCache.delete(`group:id:${id}`);
     if (group?.group_id) {
       await RunCache.delete(`group:group_id:${group.group_id}`);
@@ -335,13 +339,23 @@ export class GroupService {
   }
 
   /**
-   * Clears all group-related cache
+   * Clears all group-related cache including relationship-specific caches
+   * @param {IGroup} [group] - Optional group to clear specific relationship caches
    * @private
    */
-  private async clearGroupCache(): Promise<void> {
+  private async clearGroupCache(group?: IGroup): Promise<void> {
     await RunCache.delete('groups:all');
     await RunCache.delete('groups:all:hierarchy');
-    // Note: Subcategory and group_category specific caches will need manual clearing
-    // when those entities change
+
+    // Clear subcategory-specific caches if group has subcategory relationship
+    if (group?.subcategory_id) {
+      await RunCache.delete(`groups:subcategory:${group.subcategory_id}`);
+      await RunCache.delete(`groups:subcategory:all:${group.subcategory_id}`);
+    }
+
+    // Clear group_category-specific caches if group has group_category relationship
+    if (group?.group_category_id) {
+      await RunCache.delete(`groups:group_category:${group.group_category_id}`);
+    }
   }
 }
