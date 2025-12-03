@@ -74,39 +74,32 @@ export class UserService {
   }
 
   /**
-   * Creates or updates a user in the database
-   * @param {Partial<IUser>} userData - The user data to upsert
-   * @returns {Promise<IUser>} The created or updated user
+   * Creates or updates a user in the database using atomic upsert
+   * @param {Object} userData - The user data to upsert
+   * @returns {Promise<IUser>} The created or updated user (fresh from database)
    */
   async upsertUser(userData: {
     telegram_id: string;
     telegram_username?: string;
     telegram_name?: string;
   }): Promise<IUser> {
-    const existingUser = await this.findUser(userData.telegram_id);
-
-    if (existingUser) {
-      // Update existing user
-      await this.knexService.knex('user').where({ telegram_id: userData.telegram_id }).update({
-        username: userData.telegram_username,
-        tg_first_name: userData.telegram_name,
-        updated_at: new Date(),
-      });
-      return {
-        ...existingUser,
-        username: userData.telegram_username ?? existingUser.username,
-        tg_first_name: userData.telegram_name ?? existingUser.tg_first_name,
-      };
-    } else {
-      // Create new user
-      const newUser: Partial<IUser> = {
+    // Use PostgreSQL's ON CONFLICT for atomic upsert to avoid race conditions
+    const [user] = await this.knexService
+      .knex<IUser>('user')
+      .insert({
         telegram_id: userData.telegram_id,
         username: userData.telegram_username ?? null,
         tg_first_name: userData.telegram_name ?? null,
         tg_last_name: null,
-      };
-      await this.knexService.knex<IUser>('user').insert(newUser);
-      return newUser as IUser;
-    }
+      })
+      .onConflict('telegram_id')
+      .merge({
+        username: userData.telegram_username ?? null,
+        tg_first_name: userData.telegram_name ?? null,
+        // Let database handle updated_at via table.timestamps(true, true)
+      })
+      .returning('*');
+
+    return user;
   }
 }
