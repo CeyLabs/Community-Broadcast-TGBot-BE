@@ -87,14 +87,11 @@ export class UserService {
 
     if (existingUser) {
       // Update existing user
-      await this.knexService
-        .knex('user')
-        .where({ telegram_id: userData.telegram_id })
-        .update({
-          username: userData.telegram_username,
-          tg_first_name: userData.telegram_name,
-          updated_at: new Date(),
-        });
+      await this.knexService.knex('user').where({ telegram_id: userData.telegram_id }).update({
+        username: userData.telegram_username,
+        tg_first_name: userData.telegram_name,
+        updated_at: new Date(),
+      });
       return {
         ...existingUser,
         username: userData.telegram_username ?? existingUser.username,

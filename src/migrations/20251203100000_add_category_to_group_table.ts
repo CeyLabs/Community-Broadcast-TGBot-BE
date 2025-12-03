@@ -10,10 +10,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // Add category column to group table
   await knex.schema.alterTable(tableName, (table) => {
-    table
-      .specificType('category', 'group_category')
-      .notNullable()
-      .defaultTo('global');
+    table.specificType('category', 'group_category').notNullable().defaultTo('global');
   });
 }
 

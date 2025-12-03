@@ -65,7 +65,7 @@ export class WelcomeService {
    * @returns {Promise<boolean>} Whether the user is an admin
    */
   private async isUserAdmin(userId: string): Promise<boolean> {
-    const adminIds = process.env.ADMIN_IDS?.split(',').map(id => id.trim()) || [];
+    const adminIds = process.env.ADMIN_IDS?.split(',').map((id) => id.trim()) || [];
     return adminIds.includes(userId);
   }
 
@@ -131,7 +131,7 @@ export class WelcomeService {
 
     // Check if the bot itself was added to a group
     const botId = ctx.botInfo?.id;
-    const botWasAdded = message.new_chat_members.some(member => member.id === botId);
+    const botWasAdded = message.new_chat_members.some((member) => member.id === botId);
 
     if (botWasAdded && ctx.chat.type !== 'private') {
       const chatId = String(ctx.chat.id);
@@ -247,9 +247,7 @@ export class WelcomeService {
 
     const isAdmin = await this.isUserAdmin(userId);
     if (!isAdmin) {
-      await ctx.reply(
-        'This bot is for administrators only. Use /start to learn more.',
-      );
+      await ctx.reply('This bot is for administrators only. Use /start to learn more.');
     }
   }
 

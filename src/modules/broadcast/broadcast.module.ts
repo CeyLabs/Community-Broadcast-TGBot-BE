@@ -17,12 +17,7 @@ import { EventDetailModule } from '../event-detail/event-detail.module';
  * @description Handles broadcasting messages to community groups
  */
 @Module({
-  imports: [
-    GroupModule,
-    UserModule,
-    EventDetailModule,
-    forwardRef(() => CommonModule),
-  ],
+  imports: [GroupModule, UserModule, EventDetailModule, forwardRef(() => CommonModule)],
   providers: [BroadcastService],
   exports: [BroadcastService],
 })

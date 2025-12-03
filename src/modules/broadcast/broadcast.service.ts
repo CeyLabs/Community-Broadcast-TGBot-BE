@@ -70,10 +70,19 @@ export class BroadcastService {
     // Check if user is an admin
     const isAdmin = await this.isUserAdmin(userId);
     if (!isAdmin) {
-      await TelegramLogger.info(`User denied access to broadcast - not an admin`, undefined, userId);
-      await ctx.reply(this.escapeMarkdown('❌ You do not have access to broadcast messages. Only admins can broadcast.'), {
-        parse_mode: 'MarkdownV2',
-      });
+      await TelegramLogger.info(
+        `User denied access to broadcast - not an admin`,
+        undefined,
+        userId,
+      );
+      await ctx.reply(
+        this.escapeMarkdown(
+          '❌ You do not have access to broadcast messages. Only admins can broadcast.',
+        ),
+        {
+          parse_mode: 'MarkdownV2',
+        },
+      );
       return;
     }
 
@@ -93,7 +102,7 @@ export class BroadcastService {
    * @returns {Promise<boolean>} Whether the user is an admin
    */
   private async isUserAdmin(userId: string): Promise<boolean> {
-    const adminIds = process.env.ADMIN_IDS?.split(',').map(id => id.trim()) || [];
+    const adminIds = process.env.ADMIN_IDS?.split(',').map((id) => id.trim()) || [];
     return adminIds.includes(userId);
   }
 
@@ -106,9 +115,11 @@ export class BroadcastService {
   private async showBroadcastMenu(ctx: Context): Promise<void> {
     try {
       const globalCount = await this.groupService.getGroupCount();
-      const sriLankaCount = await this.groupService.getGroupCountByCategory(GroupCategory.SRI_LANKA);
+      const sriLankaCount = await this.groupService.getGroupCountByCategory(
+        GroupCategory.SRI_LANKA,
+      );
       const vipCount = await this.groupService.getGroupCountByCategory(GroupCategory.VIP);
-      
+
       const welcomeMessage = `Hello *Admin* 👋
 Here you can create and broadcast messages to community groups\\.
 
@@ -138,7 +149,12 @@ Here you can create and broadcast messages to community groups\\.
         reply_markup: {
           inline_keyboard: [
             [{ text: `🌍 Global (${globalCount} groups)`, callback_data: 'category_global' }],
-            [{ text: `🇱🇰 Sri Lanka (${sriLankaCount} groups)`, callback_data: 'category_sri_lanka' }],
+            [
+              {
+                text: `🇱🇰 Sri Lanka (${sriLankaCount} groups)`,
+                callback_data: 'category_sri_lanka',
+              },
+            ],
             [{ text: `⭐ VIP (${vipCount} groups)`, callback_data: 'category_vip' }],
           ],
         },
@@ -534,11 +550,7 @@ Here you can create and broadcast messages to community groups\\.
       });
 
       for (const [index, message] of session.messages.entries()) {
-        const processedText = await this.replaceVars(
-          message.text ?? '',
-          previewGroup,
-          true,
-        );
+        const processedText = await this.replaceVars(message.text ?? '', previewGroup, true);
 
         const urlButtons: InlineKeyboardButton[][] = message.urlButtons.map((btn) => [
           { text: btn.text, url: btn.url },
@@ -675,7 +687,9 @@ Here you can create and broadcast messages to community groups\\.
       }
 
       await ctx.reply(
-        this.escapeMarkdown(`🚀 Starting to send messages to ${groups.length} groups (${categoryName})...`),
+        this.escapeMarkdown(
+          `🚀 Starting to send messages to ${groups.length} groups (${categoryName})...`,
+        ),
         {
           parse_mode: 'MarkdownV2',
         },
@@ -806,9 +820,7 @@ Here you can create and broadcast messages to community groups\\.
             }
 
             // Escape any commas in the group name for CSV format
-            const escapedGroupName = group.name.includes(',')
-              ? `"${group.name}"`
-              : group.name;
+            const escapedGroupName = group.name.includes(',') ? `"${group.name}"` : group.name;
 
             if (message.isPinned) {
               try {
@@ -847,9 +859,7 @@ Here you can create and broadcast messages to community groups\\.
             failureCount++;
 
             // Escape any commas in the group name for CSV format
-            const escapedGroupName = group.name.includes(',')
-              ? `"${group.name}"`
-              : group.name;
+            const escapedGroupName = group.name.includes(',') ? `"${group.name}"` : group.name;
 
             // Add failure entry to CSV with error message
             const errorMsg = String(error).replace(/"/g, '""');

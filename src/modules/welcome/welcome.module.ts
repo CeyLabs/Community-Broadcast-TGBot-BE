@@ -16,12 +16,7 @@ import { BroadcastModule } from '../broadcast/broadcast.module';
  * @description Manages welcome interactions and group registration
  */
 @Module({
-  imports: [
-    GroupModule,
-    UserModule,
-    BroadcastModule,
-    forwardRef(() => CommonModule),
-  ],
+  imports: [GroupModule, UserModule, BroadcastModule, forwardRef(() => CommonModule)],
   providers: [WelcomeService],
   exports: [WelcomeService],
 })
