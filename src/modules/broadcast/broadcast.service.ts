@@ -1823,10 +1823,11 @@ Here you can create and broadcast messages to community groups\\.
   ): Promise<void> {
     try {
       // Insert only the broadcast message detail
+      // Use group.group_id (Telegram ID), fallback to internal UUID if missing
       await this.knexService.knex<IBroadcastMessageDetail>('broadcast_message_detail').insert({
         broadcast_id: broadcastId,
         message_id: messageId,
-        group_id: group.group_id || '',
+        group_id: group.group_id ?? group.id,
         is_sent: isSent,
       });
     } catch (error) {
