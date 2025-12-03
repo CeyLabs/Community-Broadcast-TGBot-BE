@@ -103,23 +103,52 @@ pnpm run serve:local
 
 ## 📊 Database Schema
 
+### Category Table
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| name | VARCHAR | Category name |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+### Subcategory Table
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| name | VARCHAR | Subcategory name |
+| category_id | UUID | Foreign key to category |
+| has_group_categories | BOOLEAN | Whether subcategory has nested group categories |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
+### Group Category Table
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| name | VARCHAR | Group category name |
+| subcategory_id | UUID | Foreign key to subcategory |
+| created_at | TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp |
+
 ### Groups Table
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
 | name | VARCHAR | Group name |
-| group_id | BIGINT | Telegram group ID (unique) |
+| group_id | VARCHAR | Telegram group ID (unique) |
 | telegram_link | VARCHAR | Telegram invite link |
+| subcategory_id | UUID | Foreign key to subcategory (nullable) |
+| group_category_id | UUID | Foreign key to group_category (nullable) |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 
 ### Users Table
 | Column | Type | Description |
 |--------|------|-------------|
-| id | UUID | Primary key |
-| telegram_id | BIGINT | Telegram user ID (unique) |
-| telegram_username | VARCHAR | Telegram username |
-| telegram_name | VARCHAR | Telegram display name |
+| telegram_id | VARCHAR | Primary key (Telegram user ID) |
+| username | VARCHAR | Telegram username (unique) |
+| tg_first_name | VARCHAR | Telegram first name |
+| tg_last_name | VARCHAR | Telegram last name |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 
