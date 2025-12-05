@@ -54,16 +54,16 @@ export class CategoryService {
     if (category.has_subcategories) {
       // Count groups in all subcategories under this category
       const result = await this.knexService
-        .knex('group')
-        .join('subcategory', 'group.subcategory_id', 'subcategory.id')
+        .knex('telegram_group')
+        .join('subcategory', 'telegram_group.subcategory_id', 'subcategory.id')
         .where('subcategory.category_id', categoryId)
-        .count('group.id as count')
+        .count('telegram_group.id as count')
         .first<{ count: string }>();
       return Number(result?.count || 0);
     } else {
       // Count direct groups under this category
       const result = await this.knexService
-        .knex('group')
+        .knex('telegram_group')
         .where({ category_id: categoryId })
         .count('id as count')
         .first<{ count: string }>();

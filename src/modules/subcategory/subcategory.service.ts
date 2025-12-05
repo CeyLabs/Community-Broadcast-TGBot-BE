@@ -62,7 +62,7 @@ export class SubcategoryService {
    */
   async getGroupCount(subcategoryId: string): Promise<number> {
     const result = await this.knexService
-      .knex('group')
+      .knex('telegram_group')
       .where({ subcategory_id: subcategoryId })
       .count('id as count')
       .first<{ count: string }>();

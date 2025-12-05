@@ -1,6 +1,6 @@
 import type { Knex } from 'knex';
 
-const tableName = 'group';
+const tableName = 'telegram_group';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(tableName, (table) => {

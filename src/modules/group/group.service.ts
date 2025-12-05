@@ -32,7 +32,7 @@ export class GroupService {
     }
 
     const groups = await this.knexService
-      .knex<IGroup>('group')
+      .knex<IGroup>('telegram_group')
       .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
     await RunCache.set({ key: cacheKey, value: JSON.stringify(groups) });
@@ -54,7 +54,7 @@ export class GroupService {
     }
 
     const groups = await this.knexService
-      .knex<IGroupWithHierarchy>('group as g')
+      .knex<IGroupWithHierarchy>('telegram_group as g')
       .leftJoin('category as c', 'g.category_id', 'c.id')
       .leftJoin('subcategory as s', 'g.subcategory_id', 's.id')
       .leftJoin('category as pc', 's.category_id', 'pc.id')
@@ -92,7 +92,7 @@ export class GroupService {
     }
 
     const groups = await this.knexService
-      .knex<IGroup>('group')
+      .knex<IGroup>('telegram_group')
       .where({ category_id: categoryId })
       .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
@@ -116,7 +116,7 @@ export class GroupService {
     }
 
     const groups = await this.knexService
-      .knex<IGroup>('group')
+      .knex<IGroup>('telegram_group')
       .where({ subcategory_id: subcategoryId })
       .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
@@ -142,13 +142,13 @@ export class GroupService {
 
     // Get direct groups under category
     const directGroups = await this.knexService
-      .knex<IGroup>('group')
+      .knex<IGroup>('telegram_group')
       .where({ category_id: categoryId })
       .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
     // Get nested groups via subcategory
     const nestedGroups = await this.knexService
-      .knex<IGroup>('group as g')
+      .knex<IGroup>('telegram_group as g')
       .join('subcategory as s', 'g.subcategory_id', 's.id')
       .where('s.category_id', categoryId)
       .select(
@@ -174,7 +174,7 @@ export class GroupService {
    */
   async getGroupCountByCategory(categoryId: string): Promise<number> {
     const result = await this.knexService
-      .knex('group')
+      .knex('telegram_group')
       .where({ category_id: categoryId })
       .count('id as count')
       .first<{ count: string }>();
@@ -189,7 +189,7 @@ export class GroupService {
    */
   async getGroupCountBySubcategory(subcategoryId: string): Promise<number> {
     const result = await this.knexService
-      .knex('group')
+      .knex('telegram_group')
       .where({ subcategory_id: subcategoryId })
       .count('id as count')
       .first<{ count: string }>();
@@ -205,14 +205,14 @@ export class GroupService {
   async getTotalGroupCountUnderCategory(categoryId: string): Promise<number> {
     // Count direct groups
     const directCount = await this.knexService
-      .knex('group')
+      .knex('telegram_group')
       .where({ category_id: categoryId })
       .count('id as count')
       .first<{ count: string }>();
 
     // Count nested groups via subcategory
     const nestedCount = await this.knexService
-      .knex('group as g')
+      .knex('telegram_group as g')
       .join('subcategory as s', 'g.subcategory_id', 's.id')
       .where('s.category_id', categoryId)
       .count('g.id as count')
@@ -234,7 +234,7 @@ export class GroupService {
       return JSON.parse(cached as string) as IGroup;
     }
 
-    const group = await this.knexService.knex<IGroup>('group').where({ id }).first();
+    const group = await this.knexService.knex<IGroup>('telegram_group').where({ id }).first();
 
     if (group) {
       await RunCache.set({ key: cacheKey, value: JSON.stringify(group) });
@@ -256,7 +256,7 @@ export class GroupService {
       return JSON.parse(cached as string) as IGroup;
     }
 
-    const group = await this.knexService.knex<IGroup>('group').where({ group_id: groupId }).first();
+    const group = await this.knexService.knex<IGroup>('telegram_group').where({ group_id: groupId }).first();
 
     if (group) {
       await RunCache.set({ key: cacheKey, value: JSON.stringify(group) });
@@ -271,7 +271,7 @@ export class GroupService {
    * @returns {Promise<IGroup>} The created group
    */
   async createGroup(groupData: ICreateGroup): Promise<IGroup> {
-    const [group] = await this.knexService.knex<IGroup>('group').insert(groupData).returning('*');
+    const [group] = await this.knexService.knex<IGroup>('telegram_group').insert(groupData).returning('*');
 
     // Clear cache including related category/subcategory caches
     await this.clearGroupCache(group);
@@ -290,7 +290,7 @@ export class GroupService {
     const oldGroup = await this.getGroupById(id);
 
     const [group] = await this.knexService
-      .knex<IGroup>('group')
+      .knex<IGroup>('telegram_group')
       .where({ id })
       .update({ ...groupData, updated_at: new Date() })
       .returning('*');
@@ -313,7 +313,7 @@ export class GroupService {
    */
   async deleteGroup(id: string): Promise<boolean> {
     const group = await this.getGroupById(id);
-    const deleted = await this.knexService.knex<IGroup>('group').where({ id }).delete();
+    const deleted = await this.knexService.knex<IGroup>('telegram_group').where({ id }).delete();
 
     // Clear cache including related category/subcategory caches
     await this.clearGroupCache(group);
@@ -331,7 +331,7 @@ export class GroupService {
    */
   async getGroupCount(): Promise<number> {
     const result = await this.knexService
-      .knex('group')
+      .knex('telegram_group')
       .count('id as count')
       .first<{ count: string }>();
 

@@ -16,7 +16,7 @@ export async function up(knex: Knex): Promise<void> {
       .string('group_id')
       .notNullable()
       .references('group_id')
-      .inTable('group')
+      .inTable('telegram_group')
       .onDelete('CASCADE');
     table.boolean('is_sent').notNullable().defaultTo(false);
     table.timestamp('sent_at');

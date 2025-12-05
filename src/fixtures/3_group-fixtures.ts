@@ -5,7 +5,7 @@
 
 import { Knex } from 'knex';
 
-const TABLE_NAME = 'group';
+const TABLE_NAME = 'telegram_group';
 
 export async function seed(knex: Knex): Promise<void> {
   // Clear existing entries
