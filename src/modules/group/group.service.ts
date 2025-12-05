@@ -256,7 +256,10 @@ export class GroupService {
       return JSON.parse(cached as string) as IGroup;
     }
 
-    const group = await this.knexService.knex<IGroup>('telegram_group').where({ group_id: groupId }).first();
+    const group = await this.knexService
+      .knex<IGroup>('telegram_group')
+      .where({ group_id: groupId })
+      .first();
 
     if (group) {
       await RunCache.set({ key: cacheKey, value: JSON.stringify(group) });
@@ -269,9 +272,16 @@ export class GroupService {
    * Creates a new group
    * @param {ICreateGroup} groupData - The group data to insert (name and group_id required)
    * @returns {Promise<IGroup>} The created group
+   * @throws {Error} If both category_id and subcategory_id are set, or if neither is set
    */
   async createGroup(groupData: ICreateGroup): Promise<IGroup> {
-    const [group] = await this.knexService.knex<IGroup>('telegram_group').insert(groupData).returning('*');
+    // Validate mutual exclusivity of category_id and subcategory_id
+    this.validateCategorySubcategoryExclusivity(groupData.category_id, groupData.subcategory_id);
+
+    const [group] = await this.knexService
+      .knex<IGroup>('telegram_group')
+      .insert(groupData)
+      .returning('*');
 
     // Clear cache including related category/subcategory caches
     await this.clearGroupCache(group);
@@ -284,10 +294,20 @@ export class GroupService {
    * @param {string} id - The group ID to update
    * @param {Partial<IGroup>} groupData - The group data to update
    * @returns {Promise<IGroup | undefined>} The updated group
+   * @throws {Error} If update would result in both category_id and subcategory_id being set, or neither
    */
   async updateGroup(id: string, groupData: Partial<IGroup>): Promise<IGroup | undefined> {
-    // Get old group data to clear old relationship caches
+    // Get old group data to clear old relationship caches and validate
     const oldGroup = await this.getGroupById(id);
+
+    // Merge old data with new data to validate final state
+    const finalCategoryId =
+      'category_id' in groupData ? groupData.category_id : oldGroup?.category_id;
+    const finalSubcategoryId =
+      'subcategory_id' in groupData ? groupData.subcategory_id : oldGroup?.subcategory_id;
+
+    // Validate mutual exclusivity of category_id and subcategory_id
+    this.validateCategorySubcategoryExclusivity(finalCategoryId, finalSubcategoryId);
 
     const [group] = await this.knexService
       .knex<IGroup>('telegram_group')
@@ -336,6 +356,34 @@ export class GroupService {
       .first<{ count: string }>();
 
     return Number(result?.count || 0);
+  }
+
+  /**
+   * Validates that category_id and subcategory_id are mutually exclusive
+   * A group must have exactly one of category_id or subcategory_id set
+   * @param {string | null | undefined} categoryId - The category ID
+   * @param {string | null | undefined} subcategoryId - The subcategory ID
+   * @throws {Error} If both are set, or if neither is set
+   * @private
+   */
+  private validateCategorySubcategoryExclusivity(
+    categoryId?: string | null,
+    subcategoryId?: string | null,
+  ): void {
+    const hasCategoryId = categoryId !== null && categoryId !== undefined;
+    const hasSubcategoryId = subcategoryId !== null && subcategoryId !== undefined;
+
+    if (hasCategoryId && hasSubcategoryId) {
+      throw new Error(
+        'A group cannot have both category_id and subcategory_id set. These fields are mutually exclusive.',
+      );
+    }
+
+    if (!hasCategoryId && !hasSubcategoryId) {
+      throw new Error(
+        'A group must have either category_id or subcategory_id set. Exactly one is required.',
+      );
+    }
   }
 
   /**

@@ -20,6 +20,13 @@ export async function up(knex: Knex): Promise<void> {
     table.index('category_id', 'idx_group_category_id');
     table.index('subcategory_id', 'idx_group_subcategory_id');
     table.index('name', 'idx_group_name');
+
+    // Ensure mutual exclusivity: group can have category_id OR subcategory_id, not both
+    table.check(
+      '(category_id IS NULL AND subcategory_id IS NOT NULL) OR (category_id IS NOT NULL AND subcategory_id IS NULL)',
+      [],
+      'chk_group_category_subcategory_exclusivity',
+    );
   });
 }
 

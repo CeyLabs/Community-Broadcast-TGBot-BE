@@ -50,7 +50,8 @@ export interface IGroupForVars {
 /**
  * Interface for creating a new group
  * @interface ICreateGroup
- * @description Defines the required and optional fields for creating a new group
+ * @description Defines the required and optional fields for creating a new group.
+ * Note: category_id and subcategory_id are mutually exclusive - exactly one must be set.
  */
 export interface ICreateGroup {
   /** Display name of the group (required) */
@@ -59,9 +60,15 @@ export interface ICreateGroup {
   group_id: string;
   /** Telegram invite link for the group (optional) */
   telegram_link?: string;
-  /** Foreign key to category table (optional) */
+  /**
+   * Foreign key to category table (for direct groups).
+   * Mutually exclusive with subcategory_id - exactly one must be set.
+   */
   category_id?: string | null;
-  /** Foreign key to subcategory table (optional) */
+  /**
+   * Foreign key to subcategory table (for nested groups).
+   * Mutually exclusive with category_id - exactly one must be set.
+   */
   subcategory_id?: string | null;
 }
 
