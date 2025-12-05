@@ -103,11 +103,29 @@ pnpm run serve:local
 
 ## 📊 Database Schema
 
+### Hierarchy Structure
+
+The bot uses a 3-level hierarchy with "Global" being implicit at the top:
+
+```
+Global (implicit - all groups)
+├── Other (category, has_subcategories: false)
+│   └── Groups (via category_id)
+├── Sri Lanka (category, has_subcategories: true)
+│   ├── Ceylon Cash (subcategory)
+│   │   └── Groups (via subcategory_id)
+│   └── Community (subcategory)
+│       └── Groups (via subcategory_id)
+└── Clients (category, has_subcategories: false)
+    └── Groups (via category_id)
+```
+
 ### Category Table
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
-| name | VARCHAR | Category name |
+| name | VARCHAR | Category name (e.g., Other, Sri Lanka, Clients) |
+| has_subcategories | BOOLEAN | Whether category has nested subcategories |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 
@@ -115,32 +133,24 @@ pnpm run serve:local
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
-| name | VARCHAR | Subcategory name |
+| name | VARCHAR | Subcategory name (e.g., Ceylon Cash, Community) |
 | category_id | UUID | Foreign key to category |
-| has_group_categories | BOOLEAN | Whether subcategory has nested group categories |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
 
-### Group Category Table
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| name | VARCHAR | Group category name |
-| subcategory_id | UUID | Foreign key to subcategory |
-| created_at | TIMESTAMP | Creation timestamp |
-| updated_at | TIMESTAMP | Last update timestamp |
-
-### Groups Table
+### Telegram Group Table
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
 | name | VARCHAR | Group name |
 | group_id | VARCHAR | Telegram group ID (unique) |
 | telegram_link | VARCHAR | Telegram invite link |
-| subcategory_id | UUID | Foreign key to subcategory (nullable) |
-| group_category_id | UUID | Foreign key to group_category (nullable) |
+| category_id | UUID | Foreign key to category (nullable, mutually exclusive with subcategory_id) |
+| subcategory_id | UUID | Foreign key to subcategory (nullable, mutually exclusive with category_id) |
 | created_at | TIMESTAMP | Creation timestamp |
 | updated_at | TIMESTAMP | Last update timestamp |
+
+> **Note:** A group must have exactly one of `category_id` OR `subcategory_id` set (enforced by database constraint).
 
 ### Users Table
 | Column | Type | Description |
