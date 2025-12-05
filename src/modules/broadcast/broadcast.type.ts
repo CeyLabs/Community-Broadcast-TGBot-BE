@@ -25,19 +25,19 @@ export type TMediaType =
 /**
  * Interface for broadcast target selection
  * @interface IBroadcastTarget
- * @description Defines the target for broadcasting - can be global, subcategory, or group category
+ * @description Defines the target for broadcasting - can be global, category, or subcategory
  */
 export interface IBroadcastTarget {
-  /** Target type: global broadcasts to all, subcategory to all under subcategory, group_category to specific group category */
-  type: 'global' | 'subcategory' | 'group_category';
+  /** Target type: global broadcasts to all, category to all under category, subcategory to specific subcategory */
+  type: 'global' | 'category' | 'subcategory';
+  /** ID of the category (when type is 'category') */
+  categoryId?: string;
+  /** Name of the category for display */
+  categoryName?: string;
   /** ID of the subcategory (when type is 'subcategory') */
   subcategoryId?: string;
   /** Name of the subcategory for display */
   subcategoryName?: string;
-  /** ID of the group category (when type is 'group_category') */
-  groupCategoryId?: string;
-  /** Name of the group category for display */
-  groupCategoryName?: string;
 }
 
 /**
@@ -73,8 +73,8 @@ export interface IBroadcastSession {
     | 'awaiting_message'
     | 'creating_post'
     | 'idle'
-    | 'selecting_subcategory'
-    | 'selecting_group_category';
+    | 'selecting_category'
+    | 'selecting_subcategory';
   /** Currently selected action */
   selectedAction?: string;
   /** Array of messages in the broadcast */

@@ -6,7 +6,7 @@
 /**
  * Interface representing a subcategory
  * @interface ISubcategory
- * @description Defines the structure of a subcategory (e.g., Other, Sri Lanka, Clients)
+ * @description Defines the structure of a subcategory (e.g., Ceylon Cash, Community under Sri Lanka)
  */
 export interface ISubcategory {
   /** Unique identifier for the subcategory */
@@ -15,8 +15,6 @@ export interface ISubcategory {
   name: string;
   /** Reference to the parent category */
   category_id: string;
-  /** Whether this subcategory has nested group categories */
-  has_group_categories: boolean;
   /** Timestamp when the subcategory was created */
   created_at?: Date;
   /** Timestamp when the subcategory was last updated */

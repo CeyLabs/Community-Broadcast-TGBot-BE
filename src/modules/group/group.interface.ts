@@ -7,7 +7,7 @@
  * Interface representing a community group
  * @interface IGroup
  * @description Defines the structure of a community group for broadcast messages
- * Groups can belong to either a subcategory directly OR a group_category (nested under subcategory)
+ * Groups can belong to either a category directly OR a subcategory (nested under category)
  */
 export interface IGroup {
   /** Unique identifier for the group */
@@ -19,15 +19,15 @@ export interface IGroup {
   /** Telegram invite link for the group */
   telegram_link: string;
   /**
-   * Foreign key to subcategory table (for direct groups like Other, Clients)
-   * Mutually exclusive with group_category_id
-   */
-  subcategory_id?: string | null;
-  /**
-   * Foreign key to group_category table (for nested groups like Ceylon Cash, Community under Sri Lanka)
+   * Foreign key to category table (for direct groups like Other, Clients)
    * Mutually exclusive with subcategory_id
    */
-  group_category_id?: string | null;
+  category_id?: string | null;
+  /**
+   * Foreign key to subcategory table (for nested groups like Ceylon Cash, Community under Sri Lanka)
+   * Mutually exclusive with category_id
+   */
+  subcategory_id?: string | null;
   /** Timestamp when the group was created */
   created_at?: Date;
   /** Timestamp when the group was last updated */
@@ -59,10 +59,10 @@ export interface ICreateGroup {
   group_id: string;
   /** Telegram invite link for the group (optional) */
   telegram_link?: string;
+  /** Foreign key to category table (optional) */
+  category_id?: string | null;
   /** Foreign key to subcategory table (optional) */
   subcategory_id?: string | null;
-  /** Foreign key to group_category table (optional) */
-  group_category_id?: string | null;
 }
 
 /**
@@ -70,10 +70,10 @@ export interface ICreateGroup {
  * @interface IGroupWithHierarchy
  */
 export interface IGroupWithHierarchy extends IGroup {
-  /** Subcategory name (if directly under subcategory) */
+  /** Category name (if directly under category) */
+  category_name?: string | null;
+  /** Subcategory name (if under subcategory) */
   subcategory_name?: string | null;
-  /** Group category name (if under group_category) */
-  group_category_name?: string | null;
-  /** Parent subcategory name (via group_category) */
-  parent_subcategory_name?: string | null;
+  /** Parent category name (via subcategory) */
+  parent_category_name?: string | null;
 }

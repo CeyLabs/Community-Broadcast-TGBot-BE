@@ -12,7 +12,6 @@ export async function up(knex: Knex): Promise<void> {
       .references('id')
       .inTable('category')
       .onDelete('CASCADE');
-    table.boolean('has_group_categories').notNullable().defaultTo(false);
     table.timestamps(true, true);
 
     table.index('category_id', 'idx_subcategory_category_id');

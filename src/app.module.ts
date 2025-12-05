@@ -19,7 +19,6 @@ import { BroadcastModule } from './modules/broadcast/broadcast.module';
 import { EventDetailModule } from './modules/event-detail/event-detail.module';
 import { CategoryModule } from './modules/category/category.module';
 import { SubcategoryModule } from './modules/subcategory/subcategory.module';
-import { GroupCategoryModule } from './modules/group-category/group-category.module';
 
 // Load environment variables
 config();
@@ -66,7 +65,6 @@ config();
     EventDetailModule,
     CategoryModule,
     SubcategoryModule,
-    GroupCategoryModule,
   ],
 
   controllers: [AppController],

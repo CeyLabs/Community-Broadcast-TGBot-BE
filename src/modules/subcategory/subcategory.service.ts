@@ -10,7 +10,7 @@ import { ISubcategory, ISubcategoryWithCount } from './subcategory.interface';
 /**
  * Service for managing subcategory data and operations
  * @class SubcategoryService
- * @description Handles subcategory-related operations (Other, Sri Lanka, Clients)
+ * @description Handles subcategory-related operations (Ceylon Cash, Community under Sri Lanka)
  */
 @Injectable()
 export class SubcategoryService {
@@ -37,15 +37,18 @@ export class SubcategoryService {
   }
 
   /**
-   * Retrieves all subcategories with their group counts
+   * Retrieves all subcategories by category ID with group counts
+   * @param {string} categoryId - The parent category ID
    * @returns {Promise<ISubcategoryWithCount[]>} Array of subcategories with group counts
    */
-  async getSubcategoriesWithGroupCount(): Promise<ISubcategoryWithCount[]> {
-    const subcategories = await this.getAllSubcategories();
+  async getSubcategoriesWithCountByCategoryId(
+    categoryId: string,
+  ): Promise<ISubcategoryWithCount[]> {
+    const subcategories = await this.getSubcategoriesByCategoryId(categoryId);
     const result: ISubcategoryWithCount[] = [];
 
     for (const subcategory of subcategories) {
-      const count = await this.getGroupCountForSubcategory(subcategory.id);
+      const count = await this.getGroupCount(subcategory.id);
       result.push({ ...subcategory, group_count: count });
     }
 
@@ -53,34 +56,17 @@ export class SubcategoryService {
   }
 
   /**
-   * Gets the total group count for a subcategory
-   * For subcategories with group_categories, counts groups in all nested group_categories
-   * For subcategories without, counts direct groups
+   * Gets the group count for a subcategory
    * @param {string} subcategoryId - The subcategory ID
-   * @returns {Promise<number>} The total group count
+   * @returns {Promise<number>} The group count
    */
-  async getGroupCountForSubcategory(subcategoryId: string): Promise<number> {
-    const subcategory = await this.getSubcategoryById(subcategoryId);
-    if (!subcategory) return 0;
-
-    if (subcategory.has_group_categories) {
-      // Count groups in all group_categories under this subcategory
-      const result = await this.knexService
-        .knex('group')
-        .join('group_category', 'group.group_category_id', 'group_category.id')
-        .where('group_category.subcategory_id', subcategoryId)
-        .count('group.id as count')
-        .first<{ count: string }>();
-      return Number(result?.count || 0);
-    } else {
-      // Count direct groups under this subcategory
-      const result = await this.knexService
-        .knex('group')
-        .where({ subcategory_id: subcategoryId })
-        .count('id as count')
-        .first<{ count: string }>();
-      return Number(result?.count || 0);
-    }
+  async getGroupCount(subcategoryId: string): Promise<number> {
+    const result = await this.knexService
+      .knex('group')
+      .where({ subcategory_id: subcategoryId })
+      .count('id as count')
+      .first<{ count: string }>();
+    return Number(result?.count || 0);
   }
 
   /**

@@ -12,7 +12,7 @@ import { IGroup, IGroupWithHierarchy, ICreateGroup } from './group.interface';
  * Service for managing community group data and operations
  * @class GroupService
  * @description Handles group-related operations with hierarchical category support
- * Groups can belong to either subcategory (direct) or group_category (nested)
+ * Groups can belong to either category (direct) or subcategory (nested under category)
  */
 @Injectable()
 export class GroupService {
@@ -33,7 +33,7 @@ export class GroupService {
 
     const groups = await this.knexService
       .knex<IGroup>('group')
-      .select('id', 'name', 'group_id', 'telegram_link', 'subcategory_id', 'group_category_id');
+      .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
     await RunCache.set({ key: cacheKey, value: JSON.stringify(groups) });
 
@@ -55,21 +55,21 @@ export class GroupService {
 
     const groups = await this.knexService
       .knex<IGroupWithHierarchy>('group as g')
+      .leftJoin('category as c', 'g.category_id', 'c.id')
       .leftJoin('subcategory as s', 'g.subcategory_id', 's.id')
-      .leftJoin('group_category as gc', 'g.group_category_id', 'gc.id')
-      .leftJoin('subcategory as ps', 'gc.subcategory_id', 'ps.id')
+      .leftJoin('category as pc', 's.category_id', 'pc.id')
       .select(
         'g.id',
         'g.name',
         'g.group_id',
         'g.telegram_link',
+        'g.category_id',
         'g.subcategory_id',
-        'g.group_category_id',
         'g.created_at',
         'g.updated_at',
+        'c.name as category_name',
         's.name as subcategory_name',
-        'gc.name as group_category_name',
-        'ps.name as parent_subcategory_name',
+        'pc.name as parent_category_name',
       );
 
     await RunCache.set({ key: cacheKey, value: JSON.stringify(groups) });
@@ -78,7 +78,31 @@ export class GroupService {
   }
 
   /**
-   * Retrieves groups by subcategory ID (direct groups)
+   * Retrieves groups by category ID (direct groups)
+   * @param {string} categoryId - The category ID to filter by
+   * @returns {Promise<IGroup[]>} Array of groups in the category
+   */
+  async getGroupsByCategory(categoryId: string): Promise<IGroup[]> {
+    const cacheKey = `groups:category:${categoryId}`;
+
+    const cachedGroups = await RunCache.get(cacheKey);
+
+    if (cachedGroups) {
+      return JSON.parse(cachedGroups as string) as IGroup[];
+    }
+
+    const groups = await this.knexService
+      .knex<IGroup>('group')
+      .where({ category_id: categoryId })
+      .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
+
+    await RunCache.set({ key: cacheKey, value: JSON.stringify(groups) });
+
+    return groups;
+  }
+
+  /**
+   * Retrieves groups by subcategory ID (nested groups)
    * @param {string} subcategoryId - The subcategory ID to filter by
    * @returns {Promise<IGroup[]>} Array of groups in the subcategory
    */
@@ -94,7 +118,7 @@ export class GroupService {
     const groups = await this.knexService
       .knex<IGroup>('group')
       .where({ subcategory_id: subcategoryId })
-      .select('id', 'name', 'group_id', 'telegram_link', 'subcategory_id', 'group_category_id');
+      .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
     await RunCache.set({ key: cacheKey, value: JSON.stringify(groups) });
 
@@ -102,37 +126,13 @@ export class GroupService {
   }
 
   /**
-   * Retrieves groups by group category ID (nested groups)
-   * @param {string} groupCategoryId - The group category ID to filter by
-   * @returns {Promise<IGroup[]>} Array of groups in the group category
-   */
-  async getGroupsByGroupCategory(groupCategoryId: string): Promise<IGroup[]> {
-    const cacheKey = `groups:group_category:${groupCategoryId}`;
-
-    const cachedGroups = await RunCache.get(cacheKey);
-
-    if (cachedGroups) {
-      return JSON.parse(cachedGroups as string) as IGroup[];
-    }
-
-    const groups = await this.knexService
-      .knex<IGroup>('group')
-      .where({ group_category_id: groupCategoryId })
-      .select('id', 'name', 'group_id', 'telegram_link', 'subcategory_id', 'group_category_id');
-
-    await RunCache.set({ key: cacheKey, value: JSON.stringify(groups) });
-
-    return groups;
-  }
-
-  /**
-   * Retrieves all groups under a subcategory including nested group categories
+   * Retrieves all groups under a category including nested subcategories
    * This is useful for "All Sri Lanka" broadcast that includes Ceylon Cash + Community groups
-   * @param {string} subcategoryId - The subcategory ID
-   * @returns {Promise<IGroup[]>} Array of all groups under subcategory (direct + nested)
+   * @param {string} categoryId - The category ID
+   * @returns {Promise<IGroup[]>} Array of all groups under category (direct + nested)
    */
-  async getAllGroupsUnderSubcategory(subcategoryId: string): Promise<IGroup[]> {
-    const cacheKey = `groups:subcategory:all:${subcategoryId}`;
+  async getAllGroupsUnderCategory(categoryId: string): Promise<IGroup[]> {
+    const cacheKey = `groups:category:all:${categoryId}`;
 
     const cachedGroups = await RunCache.get(cacheKey);
 
@@ -140,24 +140,24 @@ export class GroupService {
       return JSON.parse(cachedGroups as string) as IGroup[];
     }
 
-    // Get direct groups under subcategory
+    // Get direct groups under category
     const directGroups = await this.knexService
       .knex<IGroup>('group')
-      .where({ subcategory_id: subcategoryId })
-      .select('id', 'name', 'group_id', 'telegram_link', 'subcategory_id', 'group_category_id');
+      .where({ category_id: categoryId })
+      .select('id', 'name', 'group_id', 'telegram_link', 'category_id', 'subcategory_id');
 
-    // Get nested groups via group_category
+    // Get nested groups via subcategory
     const nestedGroups = await this.knexService
       .knex<IGroup>('group as g')
-      .join('group_category as gc', 'g.group_category_id', 'gc.id')
-      .where('gc.subcategory_id', subcategoryId)
+      .join('subcategory as s', 'g.subcategory_id', 's.id')
+      .where('s.category_id', categoryId)
       .select(
         'g.id',
         'g.name',
         'g.group_id',
         'g.telegram_link',
+        'g.category_id',
         'g.subcategory_id',
-        'g.group_category_id',
       );
 
     const allGroups = [...directGroups, ...nestedGroups];
@@ -165,6 +165,21 @@ export class GroupService {
     await RunCache.set({ key: cacheKey, value: JSON.stringify(allGroups) });
 
     return allGroups;
+  }
+
+  /**
+   * Gets the count of groups by category
+   * @param {string} categoryId - The category ID to count
+   * @returns {Promise<number>} The number of groups in the category
+   */
+  async getGroupCountByCategory(categoryId: string): Promise<number> {
+    const result = await this.knexService
+      .knex('group')
+      .where({ category_id: categoryId })
+      .count('id as count')
+      .first<{ count: string }>();
+
+    return Number(result?.count || 0);
   }
 
   /**
@@ -183,38 +198,23 @@ export class GroupService {
   }
 
   /**
-   * Gets the count of groups by group category
-   * @param {string} groupCategoryId - The group category ID to count
-   * @returns {Promise<number>} The number of groups in the group category
-   */
-  async getGroupCountByGroupCategory(groupCategoryId: string): Promise<number> {
-    const result = await this.knexService
-      .knex('group')
-      .where({ group_category_id: groupCategoryId })
-      .count('id as count')
-      .first<{ count: string }>();
-
-    return Number(result?.count || 0);
-  }
-
-  /**
-   * Gets the total count of all groups under a subcategory (direct + nested)
-   * @param {string} subcategoryId - The subcategory ID
+   * Gets the total count of all groups under a category (direct + nested)
+   * @param {string} categoryId - The category ID
    * @returns {Promise<number>} Total count of groups
    */
-  async getTotalGroupCountUnderSubcategory(subcategoryId: string): Promise<number> {
+  async getTotalGroupCountUnderCategory(categoryId: string): Promise<number> {
     // Count direct groups
     const directCount = await this.knexService
       .knex('group')
-      .where({ subcategory_id: subcategoryId })
+      .where({ category_id: categoryId })
       .count('id as count')
       .first<{ count: string }>();
 
-    // Count nested groups via group_category
+    // Count nested groups via subcategory
     const nestedCount = await this.knexService
       .knex('group as g')
-      .join('group_category as gc', 'g.group_category_id', 'gc.id')
-      .where('gc.subcategory_id', subcategoryId)
+      .join('subcategory as s', 'g.subcategory_id', 's.id')
+      .where('s.category_id', categoryId)
       .count('g.id as count')
       .first<{ count: string }>();
 
@@ -273,7 +273,7 @@ export class GroupService {
   async createGroup(groupData: ICreateGroup): Promise<IGroup> {
     const [group] = await this.knexService.knex<IGroup>('group').insert(groupData).returning('*');
 
-    // Clear cache including related subcategory/group_category caches
+    // Clear cache including related category/subcategory caches
     await this.clearGroupCache(group);
 
     return group;
@@ -315,7 +315,7 @@ export class GroupService {
     const group = await this.getGroupById(id);
     const deleted = await this.knexService.knex<IGroup>('group').where({ id }).delete();
 
-    // Clear cache including related subcategory/group_category caches
+    // Clear cache including related category/subcategory caches
     await this.clearGroupCache(group);
     await RunCache.delete(`group:id:${id}`);
     if (group?.group_id) {
@@ -347,15 +347,15 @@ export class GroupService {
     await RunCache.delete('groups:all');
     await RunCache.delete('groups:all:hierarchy');
 
+    // Clear category-specific caches if group has category relationship
+    if (group?.category_id) {
+      await RunCache.delete(`groups:category:${group.category_id}`);
+      await RunCache.delete(`groups:category:all:${group.category_id}`);
+    }
+
     // Clear subcategory-specific caches if group has subcategory relationship
     if (group?.subcategory_id) {
       await RunCache.delete(`groups:subcategory:${group.subcategory_id}`);
-      await RunCache.delete(`groups:subcategory:all:${group.subcategory_id}`);
-    }
-
-    // Clear group_category-specific caches if group has group_category relationship
-    if (group?.group_category_id) {
-      await RunCache.delete(`groups:group_category:${group.group_category_id}`);
     }
   }
 }

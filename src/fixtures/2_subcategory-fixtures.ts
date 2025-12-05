@@ -11,27 +11,19 @@ export async function seed(knex: Knex): Promise<void> {
   // Clear existing entries
   await knex(TABLE_NAME).del();
 
-  const categoryId = '00000000-0000-0000-0000-000000000001'; // Global category
+  const sriLankaCategoryId = '00000000-0000-0000-0001-000000000002'; // Sri Lanka category
 
-  // Insert subcategories
+  // Insert subcategories (only for categories with has_subcategories=true)
   await knex(TABLE_NAME).insert([
     {
-      id: '00000000-0000-0000-0001-000000000001',
-      name: 'Other',
-      category_id: categoryId,
-      has_group_categories: false, // Direct groups only
+      id: '00000000-0000-0000-0002-000000000001',
+      name: 'Ceylon Cash',
+      category_id: sriLankaCategoryId,
     },
     {
-      id: '00000000-0000-0000-0001-000000000002',
-      name: 'Sri Lanka',
-      category_id: categoryId,
-      has_group_categories: true, // Has nested group categories (Ceylon Cash, Community)
-    },
-    {
-      id: '00000000-0000-0000-0001-000000000003',
-      name: 'Clients',
-      category_id: categoryId,
-      has_group_categories: false, // Direct groups only (partner groups)
+      id: '00000000-0000-0000-0002-000000000002',
+      name: 'Community',
+      category_id: sriLankaCategoryId,
     },
   ]);
 

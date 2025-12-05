@@ -1,16 +1,16 @@
 /**
- * @fileoverview Service for managing root categories
+ * @fileoverview Service for managing categories
  * @module category.service
  */
 
 import { Injectable } from '@nestjs/common';
 import { KnexService } from '../knex/knex.service';
-import { ICategory } from './category.interface';
+import { ICategory, ICategoryWithCount } from './category.interface';
 
 /**
- * Service for managing root category data and operations
+ * Service for managing category data and operations
  * @class CategoryService
- * @description Handles category-related operations
+ * @description Handles category-related operations (Other, Sri Lanka, Clients)
  */
 @Injectable()
 export class CategoryService {
@@ -22,6 +22,53 @@ export class CategoryService {
    */
   async getAllCategories(): Promise<ICategory[]> {
     return this.knexService.knex<ICategory>('category').select('*');
+  }
+
+  /**
+   * Retrieves all categories with their group counts
+   * @returns {Promise<ICategoryWithCount[]>} Array of categories with group counts
+   */
+  async getCategoriesWithGroupCount(): Promise<ICategoryWithCount[]> {
+    const categories = await this.getAllCategories();
+    const result: ICategoryWithCount[] = [];
+
+    for (const category of categories) {
+      const count = await this.getGroupCountForCategory(category.id);
+      result.push({ ...category, group_count: count });
+    }
+
+    return result;
+  }
+
+  /**
+   * Gets the total group count for a category
+   * For categories with subcategories, counts groups in all subcategories
+   * For categories without, counts direct groups
+   * @param {string} categoryId - The category ID
+   * @returns {Promise<number>} The total group count
+   */
+  async getGroupCountForCategory(categoryId: string): Promise<number> {
+    const category = await this.getCategoryById(categoryId);
+    if (!category) return 0;
+
+    if (category.has_subcategories) {
+      // Count groups in all subcategories under this category
+      const result = await this.knexService
+        .knex('group')
+        .join('subcategory', 'group.subcategory_id', 'subcategory.id')
+        .where('subcategory.category_id', categoryId)
+        .count('group.id as count')
+        .first<{ count: string }>();
+      return Number(result?.count || 0);
+    } else {
+      // Count direct groups under this category
+      const result = await this.knexService
+        .knex('group')
+        .where({ category_id: categoryId })
+        .count('id as count')
+        .first<{ count: string }>();
+      return Number(result?.count || 0);
+    }
   }
 
   /**
