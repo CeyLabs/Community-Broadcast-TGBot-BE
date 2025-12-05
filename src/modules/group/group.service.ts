@@ -319,6 +319,9 @@ export class GroupService {
     await this.clearGroupCache(oldGroup);
     await this.clearGroupCache(group);
     await RunCache.delete(`group:id:${id}`);
+    if (oldGroup?.group_id) {
+      await RunCache.delete(`group:group_id:${oldGroup.group_id}`);
+    }
     if (group?.group_id) {
       await RunCache.delete(`group:group_id:${group.group_id}`);
     }
