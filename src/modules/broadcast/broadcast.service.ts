@@ -773,7 +773,7 @@ Here you can create and broadcast messages to community groups\\.
       });
 
       for (const [index, message] of session.messages.entries()) {
-        const processedText = await this.replaceVars(message.text ?? '', previewGroup);
+        const processedText = this.replaceVars(message.text ?? '', previewGroup);
 
         const urlButtons: InlineKeyboardButton[][] = message.urlButtons.map((btn) => [
           { text: btn.text, url: btn.url },
@@ -973,13 +973,13 @@ Here you can create and broadcast messages to community groups\\.
             telegram_link: group.telegram_link,
           };
 
-          const processedText = await this.replaceVars(message.text ?? '', groupForVars);
+          const processedText = this.replaceVars(message.text ?? '', groupForVars);
 
           const urlButtons: InlineKeyboardButton[][] = await Promise.all(
             message.urlButtons.map(async (btn) => [
               {
-                text: await this.replaceVars(btn.text, groupForVars),
-                url: await this.replaceVars(btn.url, groupForVars),
+                text: this.replaceVars(btn.text, groupForVars),
+                url: this.replaceVars(btn.url, groupForVars),
               },
             ]),
           );
@@ -1675,10 +1675,10 @@ Here you can create and broadcast messages to community groups\\.
    * Currently supports only {group} variable
    * @param {string} text - The text containing variables to replace
    * @param {IGroupForVars} [group] - The group information
-   * @returns {Promise<string>} The text with variables replaced
+   * @returns {string} The text with variables replaced
    * @private
    */
-  private async replaceVars(text: string, group?: IGroupForVars): Promise<string> {
+  private replaceVars(text: string, group?: IGroupForVars): string {
     // Simple variable replacement for group name only
     let result = text.replace(/{group}/gi, group?.group_name ?? '');
 
