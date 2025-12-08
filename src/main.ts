@@ -1,5 +1,5 @@
 /**
- * @fileoverview Main application entry point for the PizzaDao MoltoBene Telegram Bot
+ * @fileoverview Main application entry point for the Community Broadcast Telegram Bot
  * @module main
  */
 

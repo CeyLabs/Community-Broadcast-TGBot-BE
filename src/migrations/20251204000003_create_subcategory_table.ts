@@ -1,21 +1,24 @@
 import type { Knex } from 'knex';
 
-const tableName = 'city';
+const tableName = 'subcategory';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(tableName, (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.string('name').notNullable();
-    table.uuid('country_id').notNullable().references('id').inTable('country').onDelete('CASCADE');
-    table.string('group_id').unique();
-    table.string('telegram_link').unique();
+    table
+      .uuid('category_id')
+      .notNullable()
+      .references('id')
+      .inTable('category')
+      .onDelete('CASCADE');
     table.timestamps(true, true);
 
-    table.index('country_id', 'idx_city_country_id');
-    table.index('name', 'idx_city_name');
+    table.index('category_id', 'idx_subcategory_category_id');
+    table.index('name', 'idx_subcategory_name');
   });
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex.schema.dropTable(tableName);
+  await knex.schema.dropTableIfExists(tableName);
 }

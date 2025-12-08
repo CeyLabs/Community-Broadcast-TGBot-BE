@@ -61,16 +61,13 @@ export class PrivateChatMiddleware {
         typeof ctx.message.text === 'string' &&
         ctx.message.text.startsWith('/start')
       ) {
-        await ctx.reply(`MoltoBene Bot here!
-Configuration looks perfect – I'm able to detect new users and greet them with their pizza names when I have admin access.
+        await ctx.reply(`Community Broadcast Bot here!
 
-If you're seeing this message, that means I'm already in the group – just doing a quick check to confirm I have admin rights.
+This bot is used by administrators to broadcast messages to all community groups.
 
-No need to run any commands here. I'll handle the greetings and updates automatically from now on.
+I'm already in this group and will receive broadcast messages from admins.
 
-Stay saucy! 
-
-Built with ❤️ From Sri Lanka`);
+Built with ❤️`);
       }
 
       // Allow only private chats for commands and text

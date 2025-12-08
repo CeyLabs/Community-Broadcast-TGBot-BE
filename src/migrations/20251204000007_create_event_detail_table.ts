@@ -9,7 +9,7 @@ export async function up(knex: Knex): Promise<void> {
       .string('group_id')
       .notNullable()
       .references('group_id')
-      .inTable('city')
+      .inTable('telegram_group')
       .onDelete('CASCADE');
     table.boolean('is_one_person').notNullable().defaultTo(true);
     table.string('name');
@@ -23,10 +23,10 @@ export async function up(knex: Knex): Promise<void> {
     table.string('address');
     table.string('location');
     table.integer('year');
+    table.timestamps(true, true);
   });
 }
 
 export async function down(knex: Knex): Promise<void> {
-  // Then drop the table
   await knex.schema.dropTableIfExists(tableName);
 }

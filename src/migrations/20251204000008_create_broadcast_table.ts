@@ -35,10 +35,11 @@ export async function up(knex: Knex): Promise<void> {
       .references('telegram_id')
       .inTable('user')
       .onDelete('CASCADE');
+    table.timestamps(true, true);
   });
 }
 
 export async function down(knex: Knex): Promise<void> {
-  // Then drop the table
-  await knex.schema.dropTableIfExists(tableName).raw('DROP TYPE enum_broadcast_message_type;;');
+  await knex.schema.dropTableIfExists(tableName);
+  await knex.raw('DROP TYPE IF EXISTS enum_broadcast_message_type');
 }
