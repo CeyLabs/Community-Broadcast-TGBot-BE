@@ -18,7 +18,6 @@ import {
 } from 'telegraf/typings/core/types/typegram';
 
 import { CommonService } from '../common/common.service';
-import { EventDetailService } from '../event-detail/event-detail.service';
 import { GroupService } from '../group/group.service';
 import { IGroup, IGroupForVars } from '../group/group.interface';
 import { CategoryService } from '../category/category.service';
@@ -35,7 +34,6 @@ import { KnexService } from '../knex/knex.service';
 import { getContextTelegramUserId } from 'src/utils/context';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 import { UserService } from '../user/user.service';
-import { IEventDetail } from '../event-detail/event-detail.interface';
 
 /**
  * Service for managing message broadcasting functionality
@@ -46,7 +44,6 @@ import { IEventDetail } from '../event-detail/event-detail.interface';
 @Injectable()
 export class BroadcastService {
   constructor(
-    private readonly eventDetailService: EventDetailService,
     private readonly groupService: GroupService,
     private readonly knexService: KnexService,
     private readonly userService: UserService,
@@ -1700,59 +1697,21 @@ Here you can create and broadcast messages to community groups\\.
     group?: IGroupForVars,
     hardcoded: boolean = false,
   ): Promise<string> {
-    let event: IEventDetail | null;
-
-    if (hardcoded) {
-      // Use hardcoded event details for preview
-      event = {
-        id: 'a591cf21-bec6-4a6d-909e-c89a84430de3',
-        group_id: '-1001751302723',
-        is_one_person: false,
-        image_url: 'https://storage.unlock-protocol.com/9816d29f-e6a7-43c3-96b6-b9f1708fc81c',
-        name: 'Sample Community Event',
-        start_date: '2025-12-25',
-        end_date: '2025-12-25',
-        start_time: '18:00',
-        end_time: '21:00',
-        timezone: 'UTC',
-        location: 'Sample Location',
-        address: 'Sample Address',
-        country: 'Sample Country',
-        unlock_link: `app.unlock-protocol.com/event/sample-event`,
-        year: 2025,
-        slug: 'sample-event',
-      };
-    } else {
-      const currentYear = new Date().getFullYear();
-      event = await this.eventDetailService.getEventByYearAndGroupId(
-        currentYear,
-        group?.group_id ?? '',
-      );
-    }
-
+    // Simple variable replacement for group name only
     let result = text
       .replace(/{group}/gi, group?.group_name ?? '')
-      .replace(/{event_name}/gi, event?.name ?? '')
-      .replace(/{start_date}/gi, event?.start_date ?? '')
-      .replace(/{end_date}/gi, event?.end_date ?? '')
-      .replace(/{start_time}/gi, event?.start_time ?? '')
-      .replace(/{end_time}/gi, event?.end_time ?? '')
-      .replace(/{timezone}/gi, event?.timezone ?? '')
-      .replace(/{location}/gi, event?.location ?? '')
-      .replace(/{address}/gi, event?.address ?? '')
-      .replace(/{year}/gi, event?.year?.toString() ?? '')
-      .replace(/\$\{slug\}/gi, event?.slug ?? '')
-      .replace(/{slug}/gi, event?.slug ?? '');
-
-    // Handle unlock_link replacement with slug if available
-    if (event?.slug) {
-      result = result.replace(
-        /{unlock_link}/gi,
-        `https://app.unlock-protocol.com/event/${event.slug}`,
-      );
-    } else {
-      result = result.replace(/{unlock_link}/gi, event?.unlock_link ?? '');
-    }
+      .replace(/{event_name}/gi, '')
+      .replace(/{start_date}/gi, '')
+      .replace(/{end_date}/gi, '')
+      .replace(/{start_time}/gi, '')
+      .replace(/{end_time}/gi, '')
+      .replace(/{timezone}/gi, '')
+      .replace(/{location}/gi, '')
+      .replace(/{address}/gi, '')
+      .replace(/{year}/gi, '')
+      .replace(/\$\{slug\}/gi, '')
+      .replace(/{slug}/gi, '')
+      .replace(/{unlock_link}/gi, '');
 
     return result;
   }

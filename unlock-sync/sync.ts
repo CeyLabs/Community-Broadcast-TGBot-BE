@@ -9,27 +9,9 @@ dotenv.config({ path: resolve(__dirname, '../.env') });
 
 interface CSVRow {
   [key: string]: string;
-  'Event Link': string;
   'Group ID': string;
-  Address: string;
   City: string;
   Country: string;
-}
-
-interface UnlockEvent {
-  name: string;
-  slug: string;
-  image: string;
-  ticket: {
-    event_start_date: string;
-    event_start_time: string;
-    event_end_date: string;
-    event_end_time: string;
-    event_timezone: string;
-    event_is_in_person: boolean;
-    event_address: string;
-    event_location: string;
-  };
 }
 
 const START_ROW = 2;
@@ -47,39 +29,6 @@ const db = knex({
     database: process.env.PG_DB,
   },
 });
-
-/**
- * Extracts event slug from Unlock event URL
- */
-function extractEventSlug(url: string): string | null {
-  try {
-    const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/').filter(Boolean); // remove empty parts
-
-    const eventIndex = pathParts.indexOf('event');
-    if (eventIndex !== -1 && pathParts.length > eventIndex + 1) {
-      return pathParts[eventIndex + 1];
-    }
-
-    return pathParts[pathParts.length - 1] || null;
-  } catch (error) {
-    console.error('Invalid URL:', url);
-    return null;
-  }
-}
-
-/**
- * Fetches event details from Unlock API
- */
-async function fetchEventDetails(slug: string): Promise<UnlockEvent | null> {
-  try {
-    const response = await axios.get(`https://locksmith.unlock-protocol.com/v2/events/${slug}`);
-    return response.data.data;
-  } catch (error) {
-    console.error(`Failed to fetch event details for slug ${slug}:`, error);
-    return null;
-  }
-}
 
 /**
  * Reads CSV data from a URL starting from a specified row
@@ -118,6 +67,7 @@ async function readCSVFromURL(url: string, startRow: number = 1): Promise<CSVRow
 
 /**
  * Processes CSV data and writes to database
+ * Note: Event detail synchronization has been removed as it's no longer needed in the new bot
  */
 async function processCSVData(data: CSVRow[]): Promise<void> {
   for (const row of data) {
@@ -132,47 +82,8 @@ async function processCSVData(data: CSVRow[]): Promise<void> {
       continue;
     }
 
-    // Check if group_id already exists in the database
-    const existingEvent = await db('event_detail').where('group_id', groupId).first();
-
-    const eventSlug = extractEventSlug(row['Event Link']);
-    if (!eventSlug) continue;
-
-    if (existingEvent) {
-      console.log(`WARN: Event ${eventSlug} already exists in db, skipping...`);
-      continue;
-    }
-
-    const eventDetails = await fetchEventDetails(eventSlug);
-    if (!eventDetails) continue;
-
-    if (!eventDetails.ticket.event_address || !eventDetails.ticket.event_location) {
-      console.log(`WARN: Event ${eventSlug} has no address or location, skipping...`);
-      continue;
-    }
-
-    const year = new Date(eventDetails.ticket.event_start_date).getFullYear();
-
-    try {
-      await db('event_detail').insert({
-        group_id: groupId,
-        is_one_person: true,
-        name: eventDetails.name,
-        slug: eventDetails.slug,
-        image_url: eventDetails.image,
-        start_date: eventDetails.ticket.event_start_date,
-        start_time: eventDetails.ticket.event_start_time,
-        end_date: eventDetails.ticket.event_end_date,
-        end_time: eventDetails.ticket.event_end_time,
-        timezone: eventDetails.ticket.event_timezone,
-        address: eventDetails.ticket.event_address,
-        location: eventDetails.ticket.event_location,
-        year: year,
-      });
-      console.log(`OK: Successfully inserted event: ${eventDetails.slug}`);
-    } catch (error) {
-      console.error(`ERR: Failed to insert event ${eventDetails.name}:`, error);
-    }
+    // Event detail processing has been removed
+    console.log(`OK: City ${row['City']} already synced, skipping event details...`);
   }
 }
 
