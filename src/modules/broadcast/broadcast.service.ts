@@ -137,17 +137,7 @@ Here you can create and broadcast messages to community groups\\.
 📊 *Total Groups:* ${globalCount}
 
 *You can use the following variables in your broadcast messages:*\n
->\\- \`\\{group\\}\` — Group name
->\\- \`\\{event\\_name\\}\` — Event name
->\\- \`\\{start\\_date\\}\` — Event start date
->\\- \`\\{end\\_date\\}\` — Event end date
->\\- \`\\{start\\_time\\}\` — Event start time
->\\- \`\\{end\\_time\\}\` — Event end time
->\\- \`\\{timezone\\}\` — Event timezone
->\\- \`\\{location\\}\` — Event location
->\\- \`\\{address\\}\` — Event address
->\\- \`\\{year\\}\` — Event year
->\\- \`\\{unlock\\_link\\}\` — Unlock Protocol link\n
+>\\- \`\\{group\\}\` — Group name\n
 
 *Select a broadcast target:*
 `;
@@ -541,8 +531,7 @@ Here you can create and broadcast messages to community groups\\.
         `You can use variables with below format within curly brackets\\.\n\n` +
         `*Eg:*\n` +
         `Hello \\{group\\} members,\n` +
-        `We have an upcoming event on \\{location\\} at \\{start\\_time\\}\\.\n\n` +
-        `You can register via \\- \\{unlock\\_link\\}`,
+        `We have an important announcement\\.\n\n`,
       {
         parse_mode: 'MarkdownV2',
         reply_markup: this.getKeyboardMarkup(),
@@ -784,7 +773,7 @@ Here you can create and broadcast messages to community groups\\.
       });
 
       for (const [index, message] of session.messages.entries()) {
-        const processedText = await this.replaceVars(message.text ?? '', previewGroup, true);
+        const processedText = await this.replaceVars(message.text ?? '', previewGroup);
 
         const urlButtons: InlineKeyboardButton[][] = message.urlButtons.map((btn) => [
           { text: btn.text, url: btn.url },
@@ -1482,12 +1471,9 @@ Here you can create and broadcast messages to community groups\\.
       const match = buttonText.match(/^(.*?)\s*-\s*([^\s|]+)$/i);
       if (match && match.length === 3) {
         const btnText = match[1].trim();
-        let rawUrl = match[2].trim();
+        const rawUrl = match[2].trim();
 
-        if (rawUrl === '{unlock_link}') {
-          rawUrl = 'https://app.unlock-protocol.com/event/{slug}';
-          buttons.push({ text: btnText, url: rawUrl });
-        } else if (/^https?:\/\/.+/i.test(rawUrl)) {
+        if (/^https?:\/\/.+/i.test(rawUrl)) {
           try {
             new URL(rawUrl);
             buttons.push({ text: btnText, url: rawUrl });
@@ -1686,32 +1672,18 @@ Here you can create and broadcast messages to community groups\\.
 
   /**
    * Replaces variables in text with actual values
+   * Currently supports only {group} variable
    * @param {string} text - The text containing variables to replace
-   * @param {IGroupForVars} group - The group information
-   * @param {boolean} [hardcoded=false] - Whether to use hardcoded values for preview
+   * @param {IGroupForVars} [group] - The group information
    * @returns {Promise<string>} The text with variables replaced
    * @private
    */
   private async replaceVars(
     text: string,
     group?: IGroupForVars,
-    hardcoded: boolean = false,
   ): Promise<string> {
     // Simple variable replacement for group name only
-    let result = text
-      .replace(/{group}/gi, group?.group_name ?? '')
-      .replace(/{event_name}/gi, '')
-      .replace(/{start_date}/gi, '')
-      .replace(/{end_date}/gi, '')
-      .replace(/{start_time}/gi, '')
-      .replace(/{end_time}/gi, '')
-      .replace(/{timezone}/gi, '')
-      .replace(/{location}/gi, '')
-      .replace(/{address}/gi, '')
-      .replace(/{year}/gi, '')
-      .replace(/\$\{slug\}/gi, '')
-      .replace(/{slug}/gi, '')
-      .replace(/{unlock_link}/gi, '');
+    let result = text.replace(/{group}/gi, group?.group_name ?? '');
 
     return result;
   }
