@@ -9,6 +9,7 @@ import { Command, Ctx, On, Start, Update } from 'nestjs-telegraf';
 import { UserService } from '../user/user.service';
 import { CommonService } from '../common/common.service';
 import { GroupService } from '../group/group.service';
+import { GroupRegistrationService } from '../group-registration/group-registration.service';
 import { getContextTelegramUserId } from 'src/utils/context';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 
@@ -23,6 +24,7 @@ export class WelcomeService {
   constructor(
     private readonly userService: UserService,
     private readonly groupService: GroupService,
+    private readonly groupRegistrationService: GroupRegistrationService,
     @Inject(forwardRef(() => CommonService))
     private readonly commonService: CommonService,
   ) {}
@@ -259,5 +261,36 @@ export class WelcomeService {
    */
   private escapeMarkdown(text: string): string {
     return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+  }
+
+  /**
+   * Handles bot added to/removed from group (my_chat_member event)
+   * Automatically registers the group in the database when bot is added
+   * @param {Context} ctx - The Telegraf context object
+   * @returns {Promise<void>}
+   */
+  @On('my_chat_member')
+  async handleMyChatMember(@Ctx() ctx: Context): Promise<void> {
+    try {
+      const myChatMember = (ctx.update as any).my_chat_member;
+
+      if (!myChatMember) {
+        return;
+      }
+
+      // Status is in new_chat_member.status
+      const status = myChatMember.new_chat_member?.status;
+
+      // Bot was added to group
+      if (status === 'member' || status === 'administrator') {
+        await this.groupRegistrationService.handleGroupRegistration(ctx);
+      }
+      // Bot was removed from group
+      else if (status === 'left' || status === 'kicked') {
+        await this.groupRegistrationService.handleGroupRemoval(ctx);
+      }
+    } catch (error) {
+      // Silently handle errors
+    }
   }
 }

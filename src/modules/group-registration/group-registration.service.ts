@@ -34,7 +34,8 @@ export class GroupRegistrationService {
   async handleGroupRegistration(ctx: Context): Promise<void> {
     try {
       // Only process group chats
-      if (!ctx.chat || ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup') {
+      if (!ctx.chat || (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup')) {
+        console.log('Skipping non-group chat or null ctx.chat');
         return;
       }
 
@@ -82,16 +83,10 @@ export class GroupRegistrationService {
           undefined,
           undefined,
         );
-
-        // Send welcome message
-        await ctx.reply(
-          'Thank you for adding me! I have been registered in the broadcast system. ' +
-            'Admins can now use /broadcast to send messages to your group.',
-          { parse_mode: 'HTML' },
-        );
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error in handleGroupRegistration:', error);
       await TelegramLogger.error(
         `Failed to register group: ${errorMessage}`,
         error,
