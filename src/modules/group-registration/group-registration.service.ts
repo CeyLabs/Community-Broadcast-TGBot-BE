@@ -87,11 +87,7 @@ export class GroupRegistrationService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Error in handleGroupRegistration:', error);
-      await TelegramLogger.error(
-        `Failed to register group: ${errorMessage}`,
-        error,
-        undefined,
-      );
+      await TelegramLogger.error(`Failed to register group: ${errorMessage}`, error, undefined);
     }
   }
 
@@ -120,11 +116,7 @@ export class GroupRegistrationService {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await TelegramLogger.error(
-        `Failed to log group removal: ${errorMessage}`,
-        error,
-        undefined,
-      );
+      await TelegramLogger.error(`Failed to log group removal: ${errorMessage}`, error, undefined);
     }
   }
 

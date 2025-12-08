@@ -1678,10 +1678,7 @@ Here you can create and broadcast messages to community groups\\.
    * @returns {Promise<string>} The text with variables replaced
    * @private
    */
-  private async replaceVars(
-    text: string,
-    group?: IGroupForVars,
-  ): Promise<string> {
+  private async replaceVars(text: string, group?: IGroupForVars): Promise<string> {
     // Simple variable replacement for group name only
     let result = text.replace(/{group}/gi, group?.group_name ?? '');
 
