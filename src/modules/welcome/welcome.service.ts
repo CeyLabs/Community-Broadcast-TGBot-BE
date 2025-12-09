@@ -290,7 +290,7 @@ export class WelcomeService {
         await this.groupRegistrationService.handleGroupRemoval(ctx);
       }
     } catch (error) {
-      // Silently handle errors
+      await TelegramLogger.error(error, 'Error in WelcomeService.handleMyChatMember');
     }
   }
 }
