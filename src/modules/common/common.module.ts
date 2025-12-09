@@ -9,6 +9,7 @@ import { GroupModule } from '../group/group.module';
 import { CommonService } from './common.service';
 import { BroadcastModule } from '../broadcast/broadcast.module';
 import { UserModule } from '../user/user.module';
+import { GroupRegistrationModule } from '../group-registration/group-registration.module';
 
 /**
  * Module for shared functionality across the application
@@ -22,6 +23,7 @@ import { UserModule } from '../user/user.module';
     GroupModule,
     forwardRef(() => BroadcastModule),
     UserModule,
+    GroupRegistrationModule,
   ],
   providers: [CommonService],
   exports: [CommonService],

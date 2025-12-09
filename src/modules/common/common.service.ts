@@ -9,6 +9,7 @@ import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Help, On, Update } from 'nestjs-telegraf';
 import { WelcomeService } from '../welcome/welcome.service';
 import { BroadcastService } from '../broadcast/broadcast.service';
+import { AdminNotificationService } from '../group-registration/admin-notification.service';
 import { TUserFlow, IUserState } from './common.interface';
 import { getContextTelegramUserId } from 'src/utils/context';
 
@@ -29,6 +30,7 @@ export class CommonService {
     private readonly welcomeService: WelcomeService,
     @Inject(forwardRef(() => BroadcastService))
     private readonly broadcastService: BroadcastService,
+    private readonly adminNotificationService: AdminNotificationService,
   ) {}
 
   /**
@@ -56,8 +58,27 @@ export class CommonService {
    */
   @On('callback_query')
   async handleCallbackQuery(ctx: Context) {
-    await this.welcomeService.handleCallbackQuery(ctx);
-    await this.broadcastService.handleCallbackQuery?.(ctx);
+    try {
+      const callbackData =
+        ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+
+      // Handle category change callback: <index>_<buttonKey>
+      if (callbackData && callbackData.includes('_btn_')) {
+        const parts = callbackData.split('_');
+        if (parts.length >= 4) {
+          const categoryIndex = parseInt(parts[0], 10);
+          const buttonKey = parts.slice(1).join('_');
+          await this.adminNotificationService.handleCategoryChange(ctx, categoryIndex, buttonKey);
+          return;
+        }
+      }
+
+      // Route other callbacks to welcome service
+      await this.welcomeService.handleCallbackQuery(ctx);
+      await this.broadcastService.handleCallbackQuery?.(ctx);
+    } catch (error) {
+      console.error('Error in CommonService.handleCallbackQuery:', error);
+    }
   }
 
   /**
