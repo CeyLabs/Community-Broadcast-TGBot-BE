@@ -67,7 +67,6 @@ async function readCSVFromURL(url: string, startRow: number = 1): Promise<CSVRow
 
 /**
  * Processes CSV data and writes to database
- * Note: Event detail synchronization has been removed as it's no longer needed in the new bot
  */
 async function processCSVData(data: CSVRow[]): Promise<void> {
   for (const row of data) {
@@ -81,7 +80,7 @@ async function processCSVData(data: CSVRow[]): Promise<void> {
     }
 
     // Event detail processing has been removed
-    console.log(`OK: City ${row['City']} already synced, skipping event details...`);
+    console.log(`OK: City ${row['City']} already synced.`);
   }
 }
 
