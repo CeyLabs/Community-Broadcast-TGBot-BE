@@ -6,7 +6,6 @@
 import { Injectable } from '@nestjs/common';
 import { Context } from 'telegraf';
 import { GroupService } from '../group/group.service';
-import { CategoryService } from '../category/category.service';
 import { KnexService } from '../knex/knex.service';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 
@@ -22,7 +21,6 @@ export class GroupRegistrationService {
 
   constructor(
     private readonly groupService: GroupService,
-    private readonly categoryService: CategoryService,
     private readonly knexService: KnexService,
   ) {}
 
