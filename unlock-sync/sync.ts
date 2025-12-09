@@ -71,8 +71,6 @@ async function readCSVFromURL(url: string, startRow: number = 1): Promise<CSVRow
  */
 async function processCSVData(data: CSVRow[]): Promise<void> {
   for (const row of data) {
-    if (!row['Event Link']) continue;
-
     const groupId = row['Group ID'].replace('#', '');
     if (!groupId) continue;
 
