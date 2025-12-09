@@ -6,7 +6,6 @@
 import { Injectable } from '@nestjs/common';
 import { Context } from 'telegraf';
 import { GroupService } from '../group/group.service';
-import { KnexService } from '../knex/knex.service';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 
 /**
@@ -19,10 +18,7 @@ export class GroupRegistrationService {
   // ID of the "Other" category - groups are registered here by default
   private readonly OTHER_CATEGORY_ID = '00000000-0000-0000-0001-000000000001';
 
-  constructor(
-    private readonly groupService: GroupService,
-    private readonly knexService: KnexService,
-  ) {}
+  constructor(private readonly groupService: GroupService) {}
 
   /**
    * Handles group registration when bot is added to a group

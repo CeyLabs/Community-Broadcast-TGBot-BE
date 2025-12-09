@@ -6,7 +6,6 @@
 import { Module } from '@nestjs/common';
 import { GroupRegistrationService } from './group-registration.service';
 import { GroupModule } from '../group/group.module';
-import { KnexModule } from '../knex/knex.module';
 
 /**
  * Module for handling group registration
@@ -14,7 +13,7 @@ import { KnexModule } from '../knex/knex.module';
  * @description Manages automatic group registration when bot is added to groups
  */
 @Module({
-  imports: [GroupModule, KnexModule],
+  imports: [GroupModule],
   providers: [GroupRegistrationService],
   exports: [GroupRegistrationService],
 })
