@@ -6,6 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { Context } from 'telegraf';
 import { GroupService } from '../group/group.service';
+import { IGroup } from '../group/group.interface';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 
 /**
@@ -47,7 +48,7 @@ export class GroupRegistrationService {
           (telegramLink && existingGroup.telegram_link !== telegramLink);
 
         if (needsUpdate) {
-          const updateData: any = {};
+          const updateData: Partial<IGroup> = {};
           if (existingGroup.name !== groupName) {
             updateData.name = groupName;
           }
