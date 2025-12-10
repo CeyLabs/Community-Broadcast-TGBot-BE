@@ -166,8 +166,12 @@ export class AdminNotificationService {
           },
         });
       } catch (sendError) {
-        console.error('Telegram sendMessage error:', sendError);
-        throw sendError;
+        // Log error but don't throw - group is already saved in DB
+        await TelegramLogger.error(
+          'Failed to send admin notification but group was registered',
+          sendError,
+          undefined,
+        );
       }
     } catch (error) {
       await TelegramLogger.error(
@@ -206,9 +210,14 @@ export class AdminNotificationService {
         `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `⏰ *Time:* ${new Date().toISOString()}`;
 
-      await ctx.telegram.sendMessage(adminGroupId, message, {
-        parse_mode: 'Markdown',
-      });
+      try {
+        await ctx.telegram.sendMessage(adminGroupId, message, {
+          parse_mode: 'Markdown',
+        });
+      } catch (sendError) {
+        // Log error but don't throw - group removal is already handled
+        await TelegramLogger.error('Failed to send bot removal notification', sendError, undefined);
+      }
     } catch (error) {
       await TelegramLogger.error('Error notifying admin group about bot removal', error, undefined);
     }
@@ -288,11 +297,18 @@ export class AdminNotificationService {
         `📊 *Status:* ${statusText}\n` +
         `🔗 *Message ID:* ${group.id}`;
 
-      await ctx.editMessageText(message, {
-        parse_mode: 'Markdown',
-      });
-
-      console.log('Message updated successfully');
+      try {
+        await ctx.editMessageText(message, {
+          parse_mode: 'Markdown',
+        });
+      } catch (editError) {
+        // Log error but don't throw - category change is already saved in DB
+        await TelegramLogger.error(
+          'Failed to update notification message but category was changed',
+          editError,
+          undefined,
+        );
+      }
     } catch (error) {
       console.error('Error in handleCategoryChange:', error);
       await TelegramLogger.error('Error handling category change', error, undefined);
