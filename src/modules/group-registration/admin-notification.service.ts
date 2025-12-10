@@ -65,15 +65,11 @@ export class AdminNotificationService {
     try {
       const adminGroupIdStr = process.env.ADMIN_NOTIFICATIONS_GROUP_ID;
       if (!adminGroupIdStr) {
-        console.log(
-          'WARN: ADMIN_NOTIFICATIONS_GROUP_ID not configured, skipping admin notification',
-        );
         return;
       }
 
       const adminGroupId = Number(adminGroupIdStr);
       if (isNaN(adminGroupId)) {
-        console.log('WARN: ADMIN_NOTIFICATIONS_GROUP_ID is not a valid number');
         return;
       }
 
@@ -232,21 +228,14 @@ export class AdminNotificationService {
    */
   async handleCategoryChange(ctx: Context, optionIndex: number, buttonKey: string): Promise<void> {
     try {
-      console.log('AdminNotificationService.handleCategoryChange called', {
-        optionIndex,
-        buttonKey,
-      });
-
       // Get the mapping from buttonKey
       const mapping = this.buttonMap.get(buttonKey);
-      console.log('Button mapping found:', !!mapping);
       if (!mapping) {
         await ctx.answerCbQuery('❌ Button data expired');
         return;
       }
 
       const { groupId, options } = mapping;
-      console.log('Retrieved mapping:', { groupId, optionsCount: options.length });
 
       if (optionIndex >= options.length || optionIndex < 0) {
         await ctx.answerCbQuery('❌ Invalid option');
@@ -254,11 +243,9 @@ export class AdminNotificationService {
       }
 
       const selectedOption = options[optionIndex];
-      console.log('Selected option:', selectedOption);
 
       const group = await this.groupService.getGroupById(groupId);
       if (!group) {
-        console.log('Group not found:', groupId);
         await ctx.answerCbQuery('❌ Group not found');
         return;
       }
@@ -310,7 +297,6 @@ export class AdminNotificationService {
         );
       }
     } catch (error) {
-      console.error('Error in handleCategoryChange:', error);
       await TelegramLogger.error('Error handling category change', error, undefined);
     }
   }
