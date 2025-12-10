@@ -18,7 +18,6 @@ import {
 } from 'telegraf/typings/core/types/typegram';
 
 import { CommonService } from '../common/common.service';
-import { EventDetailService } from '../event-detail/event-detail.service';
 import { GroupService } from '../group/group.service';
 import { IGroup, IGroupForVars } from '../group/group.interface';
 import { CategoryService } from '../category/category.service';
@@ -35,7 +34,6 @@ import { KnexService } from '../knex/knex.service';
 import { getContextTelegramUserId } from 'src/utils/context';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 import { UserService } from '../user/user.service';
-import { IEventDetail } from '../event-detail/event-detail.interface';
 
 /**
  * Service for managing message broadcasting functionality
@@ -46,7 +44,6 @@ import { IEventDetail } from '../event-detail/event-detail.interface';
 @Injectable()
 export class BroadcastService {
   constructor(
-    private readonly eventDetailService: EventDetailService,
     private readonly groupService: GroupService,
     private readonly knexService: KnexService,
     private readonly userService: UserService,
@@ -140,17 +137,7 @@ Here you can create and broadcast messages to community groups\\.
 📊 *Total Groups:* ${globalCount}
 
 *You can use the following variables in your broadcast messages:*\n
->\\- \`\\{group\\}\` — Group name
->\\- \`\\{event\\_name\\}\` — Event name
->\\- \`\\{start\\_date\\}\` — Event start date
->\\- \`\\{end\\_date\\}\` — Event end date
->\\- \`\\{start\\_time\\}\` — Event start time
->\\- \`\\{end\\_time\\}\` — Event end time
->\\- \`\\{timezone\\}\` — Event timezone
->\\- \`\\{location\\}\` — Event location
->\\- \`\\{address\\}\` — Event address
->\\- \`\\{year\\}\` — Event year
->\\- \`\\{unlock\\_link\\}\` — Unlock Protocol link\n
+>\\- \`\\{group\\}\` — Group name\n
 
 *Select a broadcast target:*
 `;
@@ -544,8 +531,7 @@ Here you can create and broadcast messages to community groups\\.
         `You can use variables with below format within curly brackets\\.\n\n` +
         `*Eg:*\n` +
         `Hello \\{group\\} members,\n` +
-        `We have an upcoming event on \\{location\\} at \\{start\\_time\\}\\.\n\n` +
-        `You can register via \\- \\{unlock\\_link\\}`,
+        `We have an important announcement\\.\n\n`,
       {
         parse_mode: 'MarkdownV2',
         reply_markup: this.getKeyboardMarkup(),
@@ -787,7 +773,7 @@ Here you can create and broadcast messages to community groups\\.
       });
 
       for (const [index, message] of session.messages.entries()) {
-        const processedText = await this.replaceVars(message.text ?? '', previewGroup, true);
+        const processedText = this.replaceVars(message.text ?? '', previewGroup);
 
         const urlButtons: InlineKeyboardButton[][] = message.urlButtons.map((btn) => [
           { text: btn.text, url: btn.url },
@@ -987,13 +973,13 @@ Here you can create and broadcast messages to community groups\\.
             telegram_link: group.telegram_link,
           };
 
-          const processedText = await this.replaceVars(message.text ?? '', groupForVars);
+          const processedText = this.replaceVars(message.text ?? '', groupForVars);
 
           const urlButtons: InlineKeyboardButton[][] = await Promise.all(
             message.urlButtons.map(async (btn) => [
               {
-                text: await this.replaceVars(btn.text, groupForVars),
-                url: await this.replaceVars(btn.url, groupForVars),
+                text: this.replaceVars(btn.text, groupForVars),
+                url: this.replaceVars(btn.url, groupForVars),
               },
             ]),
           );
@@ -1485,12 +1471,9 @@ Here you can create and broadcast messages to community groups\\.
       const match = buttonText.match(/^(.*?)\s*-\s*([^\s|]+)$/i);
       if (match && match.length === 3) {
         const btnText = match[1].trim();
-        let rawUrl = match[2].trim();
+        const rawUrl = match[2].trim();
 
-        if (rawUrl === '{unlock_link}') {
-          rawUrl = 'https://app.unlock-protocol.com/event/{slug}';
-          buttons.push({ text: btnText, url: rawUrl });
-        } else if (/^https?:\/\/.+/i.test(rawUrl)) {
+        if (/^https?:\/\/.+/i.test(rawUrl)) {
           try {
             new URL(rawUrl);
             buttons.push({ text: btnText, url: rawUrl });
@@ -1689,70 +1672,15 @@ Here you can create and broadcast messages to community groups\\.
 
   /**
    * Replaces variables in text with actual values
+   * Currently supports only {group} variable
    * @param {string} text - The text containing variables to replace
-   * @param {IGroupForVars} group - The group information
-   * @param {boolean} [hardcoded=false] - Whether to use hardcoded values for preview
-   * @returns {Promise<string>} The text with variables replaced
+   * @param {IGroupForVars} [group] - The group information
+   * @returns {string} The text with variables replaced
    * @private
    */
-  private async replaceVars(
-    text: string,
-    group?: IGroupForVars,
-    hardcoded: boolean = false,
-  ): Promise<string> {
-    let event: IEventDetail | null;
-
-    if (hardcoded) {
-      // Use hardcoded event details for preview
-      event = {
-        id: 'a591cf21-bec6-4a6d-909e-c89a84430de3',
-        group_id: '-1001751302723',
-        is_one_person: false,
-        image_url: 'https://storage.unlock-protocol.com/9816d29f-e6a7-43c3-96b6-b9f1708fc81c',
-        name: 'Sample Community Event',
-        start_date: '2025-12-25',
-        end_date: '2025-12-25',
-        start_time: '18:00',
-        end_time: '21:00',
-        timezone: 'UTC',
-        location: 'Sample Location',
-        address: 'Sample Address',
-        country: 'Sample Country',
-        unlock_link: `app.unlock-protocol.com/event/sample-event`,
-        year: 2025,
-        slug: 'sample-event',
-      };
-    } else {
-      const currentYear = new Date().getFullYear();
-      event = await this.eventDetailService.getEventByYearAndGroupId(
-        currentYear,
-        group?.group_id ?? '',
-      );
-    }
-
-    let result = text
-      .replace(/{group}/gi, group?.group_name ?? '')
-      .replace(/{event_name}/gi, event?.name ?? '')
-      .replace(/{start_date}/gi, event?.start_date ?? '')
-      .replace(/{end_date}/gi, event?.end_date ?? '')
-      .replace(/{start_time}/gi, event?.start_time ?? '')
-      .replace(/{end_time}/gi, event?.end_time ?? '')
-      .replace(/{timezone}/gi, event?.timezone ?? '')
-      .replace(/{location}/gi, event?.location ?? '')
-      .replace(/{address}/gi, event?.address ?? '')
-      .replace(/{year}/gi, event?.year?.toString() ?? '')
-      .replace(/\$\{slug\}/gi, event?.slug ?? '')
-      .replace(/{slug}/gi, event?.slug ?? '');
-
-    // Handle unlock_link replacement with slug if available
-    if (event?.slug) {
-      result = result.replace(
-        /{unlock_link}/gi,
-        `https://app.unlock-protocol.com/event/${event.slug}`,
-      );
-    } else {
-      result = result.replace(/{unlock_link}/gi, event?.unlock_link ?? '');
-    }
+  private replaceVars(text: string, group?: IGroupForVars): string {
+    // Simple variable replacement for group name only
+    let result = text.replace(/{group}/gi, group?.group_name ?? '');
 
     return result;
   }

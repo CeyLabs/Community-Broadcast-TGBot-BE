@@ -17,9 +17,6 @@ export type TMediaType =
   | 'audio'
   | 'document'
   | 'animation'
-  | 'voice'
-  | 'location'
-  | 'contact'
   | 'sticker';
 
 /**

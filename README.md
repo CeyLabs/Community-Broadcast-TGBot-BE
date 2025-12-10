@@ -28,11 +28,6 @@ This bot serves as a broadcast management system for Telegram communities. It al
 
 - **Variables Support**
   - `{group}` - Group name
-  - `{event_name}` - Event name
-  - `{start_date}`, `{end_date}` - Event dates
-  - `{start_time}`, `{end_time}` - Event times
-  - `{timezone}`, `{location}`, `{address}` - Event details
-  - `{unlock_link}` - Unlock Protocol event link
 
 ## 🛠 Tech Stack
 
@@ -88,7 +83,12 @@ docker-compose up -d
 pnpm run migrate
 ```
 
-6. Start the development server:
+6. Seed the database with fixtures:
+```bash
+pnpm run fixtures
+```
+
+7. Start the development server:
 ```bash
 pnpm run serve:local
 ```

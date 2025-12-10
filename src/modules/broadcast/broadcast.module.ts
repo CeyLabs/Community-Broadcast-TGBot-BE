@@ -9,7 +9,6 @@ import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { BroadcastService } from './broadcast.service';
 import { CommonModule } from '../common/common.module';
-import { EventDetailModule } from '../event-detail/event-detail.module';
 import { CategoryModule } from '../category/category.module';
 import { SubcategoryModule } from '../subcategory/subcategory.module';
 
@@ -22,7 +21,6 @@ import { SubcategoryModule } from '../subcategory/subcategory.module';
   imports: [
     GroupModule,
     UserModule,
-    EventDetailModule,
     CategoryModule,
     SubcategoryModule,
     forwardRef(() => CommonModule),

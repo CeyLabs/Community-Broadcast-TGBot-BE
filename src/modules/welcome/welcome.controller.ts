@@ -10,8 +10,7 @@ import { WelcomeService } from './welcome.service';
 /**
  * Controller class that handles all welcome-related bot interactions
  * @class WelcomeController
- * @description Manages user commands and events related to the welcome flow,
- * including start command and group management
+ * @description Manages user commands and events related to the welcome flow
  */
 @Controller()
 export class WelcomeController {
