@@ -23,7 +23,12 @@ export class AdminNotificationService {
     string,
     {
       groupId: string;
-      options: Array<{ id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string }>;
+      options: Array<{
+        id: string;
+        name: string;
+        type: 'category' | 'subcategory';
+        categoryId?: string;
+      }>;
     }
   > = new Map();
   private keyCounter = 0;
@@ -60,15 +65,11 @@ export class AdminNotificationService {
     try {
       const adminGroupIdStr = process.env.ADMIN_NOTIFICATIONS_GROUP_ID;
       if (!adminGroupIdStr) {
-        console.log(
-          'WARN: ADMIN_NOTIFICATIONS_GROUP_ID not configured, skipping admin notification',
-        );
         return;
       }
 
       const adminGroupId = Number(adminGroupIdStr);
       if (isNaN(adminGroupId)) {
-        console.log('WARN: ADMIN_NOTIFICATIONS_GROUP_ID is not a valid number');
         return;
       }
 
@@ -92,20 +93,25 @@ export class AdminNotificationService {
       // Build notification message
       const message =
         `🤖 *Bot Added to Group*\n\n` +
-        `📍 *Group:* ${this.escapeMarkdown(chat.title || 'Unknown')}\n` +
-        `🔢 *Group ID:* ${this.escapeMarkdown(chat.id.toString())}\n` +
+        `📍 *Group:* ${chat.title || 'Unknown'}\n` +
+        `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `${groupTypeStr}${urlPart}\n\n` +
-        `👤 *Added by:* ${this.escapeMarkdown(userMention)}\n` +
-        `⏰ *Time:* ${this.escapeMarkdown(new Date().toISOString())}\n\n` +
+        `👤 *Added by:* ${userMention}\n` +
+        `⏰ *Time:* ${new Date().toISOString()}\n\n` +
         `📊 *Status:* Automatically registered in "Other" category\n` +
-        `🔗 *Message ID:* ${this.escapeMarkdown(group.id)}`;
+        `🔗 *Message ID:* ${group.id}`;
 
       try {
         // Get all categories for buttons
         const allCategories = await this.categoryService.getAllCategories();
 
         // Build a flat list of selectable options (categories + their subcategories)
-        const selectableOptions: Array<{ id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string }> = [];
+        const selectableOptions: Array<{
+          id: string;
+          name: string;
+          type: 'category' | 'subcategory';
+          categoryId?: string;
+        }> = [];
 
         for (const category of allCategories) {
           // Skip current category
@@ -120,7 +126,9 @@ export class AdminNotificationService {
 
           // Add subcategories if they exist
           if (category.has_subcategories) {
-            const subcategories = await this.subcategoryService.getSubcategoriesByCategoryId(category.id);
+            const subcategories = await this.subcategoryService.getSubcategoriesByCategoryId(
+              category.id,
+            );
             for (const subcat of subcategories) {
               selectableOptions.push({
                 id: subcat.id,
@@ -148,14 +156,18 @@ export class AdminNotificationService {
         ]);
 
         await ctx.telegram.sendMessage(adminGroupId, message, {
-          parse_mode: 'MarkdownV2',
+          parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: buttons,
           },
         });
       } catch (sendError) {
-        console.error('Telegram sendMessage error:', sendError);
-        throw sendError;
+        // Log error but don't throw - group is already saved in DB
+        await TelegramLogger.error(
+          'Failed to send admin notification but group was registered',
+          sendError,
+          undefined,
+        );
       }
     } catch (error) {
       await TelegramLogger.error(
@@ -190,13 +202,18 @@ export class AdminNotificationService {
 
       const message =
         `❌ *Bot Removed from Group*\n\n` +
-        `📍 *Group:* ${this.escapeMarkdown(chat.title || 'Unknown')}\n` +
-        `🔢 *Group ID:* ${this.escapeMarkdown(chat.id.toString())}\n` +
+        `📍 *Group:* ${chat.title || 'Unknown'}\n` +
+        `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `⏰ *Time:* ${new Date().toISOString()}`;
 
-      await ctx.telegram.sendMessage(adminGroupId, message, {
-        parse_mode: 'MarkdownV2',
-      });
+      try {
+        await ctx.telegram.sendMessage(adminGroupId, message, {
+          parse_mode: 'Markdown',
+        });
+      } catch (sendError) {
+        // Log error but don't throw - group removal is already handled
+        await TelegramLogger.error('Failed to send bot removal notification', sendError, undefined);
+      }
     } catch (error) {
       await TelegramLogger.error('Error notifying admin group about bot removal', error, undefined);
     }
@@ -209,27 +226,16 @@ export class AdminNotificationService {
    * @param {string} buttonKey - The button key to lookup the mapping
    * @returns {Promise<void>}
    */
-  async handleCategoryChange(
-    ctx: Context,
-    optionIndex: number,
-    buttonKey: string,
-  ): Promise<void> {
+  async handleCategoryChange(ctx: Context, optionIndex: number, buttonKey: string): Promise<void> {
     try {
-      console.log('AdminNotificationService.handleCategoryChange called', {
-        optionIndex,
-        buttonKey,
-      });
-
       // Get the mapping from buttonKey
       const mapping = this.buttonMap.get(buttonKey);
-      console.log('Button mapping found:', !!mapping);
       if (!mapping) {
         await ctx.answerCbQuery('❌ Button data expired');
         return;
       }
 
       const { groupId, options } = mapping;
-      console.log('Retrieved mapping:', { groupId, optionsCount: options.length });
 
       if (optionIndex >= options.length || optionIndex < 0) {
         await ctx.answerCbQuery('❌ Invalid option');
@@ -237,11 +243,9 @@ export class AdminNotificationService {
       }
 
       const selectedOption = options[optionIndex];
-      console.log('Selected option:', selectedOption);
 
       const group = await this.groupService.getGroupById(groupId);
       if (!group) {
-        console.log('Group not found:', groupId);
         await ctx.answerCbQuery('❌ Group not found');
         return;
       }
@@ -274,29 +278,26 @@ export class AdminNotificationService {
 
       const message =
         `🤖 *Bot Added to Group*\n\n` +
-        `📍 *Group:* ${this.escapeMarkdown(group.name || 'Unknown')}\n` +
-        `🔢 *Group ID:* ${this.escapeMarkdown(group.group_id.toString())}\n` +
+        `📍 *Group:* ${group.name || 'Unknown'}\n` +
+        `🔢 *Group ID:* ${group.group_id.toString()}\n` +
         `${group.telegram_link ? '🌐 Public' : '🔒 Private'}\n\n` +
         `📊 *Status:* ${statusText}\n` +
-        `🔗 *Message ID:* ${this.escapeMarkdown(group.id)}`;
+        `🔗 *Message ID:* ${group.id}`;
 
-      await ctx.editMessageText(message, {
-        parse_mode: 'MarkdownV2',
-      });
-
-      console.log('Message updated successfully');
+      try {
+        await ctx.editMessageText(message, {
+          parse_mode: 'Markdown',
+        });
+      } catch (editError) {
+        // Log error but don't throw - category change is already saved in DB
+        await TelegramLogger.error(
+          'Failed to update notification message but category was changed',
+          editError,
+          undefined,
+        );
+      }
     } catch (error) {
-      console.error('Error in handleCategoryChange:', error);
       await TelegramLogger.error('Error handling category change', error, undefined);
     }
-  }
-
-  /**
-   * Escapes special characters for MarkdownV2 format
-   * @param {string} text - Text to escape
-   * @returns {string} Escaped text
-   */
-  private escapeMarkdown(text: string): string {
-    return text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
   }
 }
