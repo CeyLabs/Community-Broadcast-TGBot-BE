@@ -53,6 +53,12 @@ export class PrivateChatMiddleware {
         return next();
       }
 
+      // Allow my_chat_member events (for group registration when bot is added/removed)
+      const update = ctx.update as any;
+      if (update.my_chat_member) {
+        return next();
+      }
+
       // Allow "new_chat_members" in any chat
       if (
         'message' in ctx &&
