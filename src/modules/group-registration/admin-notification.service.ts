@@ -92,13 +92,13 @@ export class AdminNotificationService {
       // Build notification message
       const message =
         `🤖 *Bot Added to Group*\n\n` +
-        `📍 *Group:* ${this.escapeMarkdown(chat.title || 'Unknown')}\n` +
-        `🔢 *Group ID:* ${this.escapeMarkdown(chat.id.toString())}\n` +
+        `📍 *Group:* ${chat.title || 'Unknown'}\n` +
+        `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `${groupTypeStr}${urlPart}\n\n` +
-        `👤 *Added by:* ${this.escapeMarkdown(userMention)}\n` +
-        `⏰ *Time:* ${this.escapeMarkdown(new Date().toISOString())}\n\n` +
+        `👤 *Added by:* ${userMention}\n` +
+        `⏰ *Time:* ${new Date().toISOString()}\n\n` +
         `📊 *Status:* Automatically registered in "Other" category\n` +
-        `🔗 *Message ID:* ${this.escapeMarkdown(group.id)}`;
+        `🔗 *Message ID:* ${group.id}`;
 
       try {
         // Get all categories for buttons
@@ -148,7 +148,7 @@ export class AdminNotificationService {
         ]);
 
         await ctx.telegram.sendMessage(adminGroupId, message, {
-          parse_mode: 'MarkdownV2',
+          parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: buttons,
           },
@@ -190,12 +190,12 @@ export class AdminNotificationService {
 
       const message =
         `❌ *Bot Removed from Group*\n\n` +
-        `📍 *Group:* ${this.escapeMarkdown(chat.title || 'Unknown')}\n` +
-        `🔢 *Group ID:* ${this.escapeMarkdown(chat.id.toString())}\n` +
+        `📍 *Group:* ${chat.title || 'Unknown'}\n` +
+        `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `⏰ *Time:* ${new Date().toISOString()}`;
 
       await ctx.telegram.sendMessage(adminGroupId, message, {
-        parse_mode: 'MarkdownV2',
+        parse_mode: 'Markdown',
       });
     } catch (error) {
       await TelegramLogger.error('Error notifying admin group about bot removal', error, undefined);
@@ -274,14 +274,14 @@ export class AdminNotificationService {
 
       const message =
         `🤖 *Bot Added to Group*\n\n` +
-        `📍 *Group:* ${this.escapeMarkdown(group.name || 'Unknown')}\n` +
-        `🔢 *Group ID:* ${this.escapeMarkdown(group.group_id.toString())}\n` +
+        `📍 *Group:* ${group.name || 'Unknown'}\n` +
+        `🔢 *Group ID:* ${group.group_id.toString()}\n` +
         `${group.telegram_link ? '🌐 Public' : '🔒 Private'}\n\n` +
         `📊 *Status:* ${statusText}\n` +
-        `🔗 *Message ID:* ${this.escapeMarkdown(group.id)}`;
+        `🔗 *Message ID:* ${group.id}`;
 
       await ctx.editMessageText(message, {
-        parse_mode: 'MarkdownV2',
+        parse_mode: 'Markdown',
       });
 
       console.log('Message updated successfully');
@@ -289,14 +289,5 @@ export class AdminNotificationService {
       console.error('Error in handleCategoryChange:', error);
       await TelegramLogger.error('Error handling category change', error, undefined);
     }
-  }
-
-  /**
-   * Escapes special characters for MarkdownV2 format
-   * @param {string} text - Text to escape
-   * @returns {string} Escaped text
-   */
-  private escapeMarkdown(text: string): string {
-    return text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
   }
 }
