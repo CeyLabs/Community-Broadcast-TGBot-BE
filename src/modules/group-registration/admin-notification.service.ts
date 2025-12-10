@@ -23,7 +23,12 @@ export class AdminNotificationService {
     string,
     {
       groupId: string;
-      options: Array<{ id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string }>;
+      options: Array<{
+        id: string;
+        name: string;
+        type: 'category' | 'subcategory';
+        categoryId?: string;
+      }>;
     }
   > = new Map();
   private keyCounter = 0;
@@ -105,7 +110,12 @@ export class AdminNotificationService {
         const allCategories = await this.categoryService.getAllCategories();
 
         // Build a flat list of selectable options (categories + their subcategories)
-        const selectableOptions: Array<{ id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string }> = [];
+        const selectableOptions: Array<{
+          id: string;
+          name: string;
+          type: 'category' | 'subcategory';
+          categoryId?: string;
+        }> = [];
 
         for (const category of allCategories) {
           // Skip current category
@@ -120,7 +130,9 @@ export class AdminNotificationService {
 
           // Add subcategories if they exist
           if (category.has_subcategories) {
-            const subcategories = await this.subcategoryService.getSubcategoriesByCategoryId(category.id);
+            const subcategories = await this.subcategoryService.getSubcategoriesByCategoryId(
+              category.id,
+            );
             for (const subcat of subcategories) {
               selectableOptions.push({
                 id: subcat.id,
@@ -209,11 +221,7 @@ export class AdminNotificationService {
    * @param {string} buttonKey - The button key to lookup the mapping
    * @returns {Promise<void>}
    */
-  async handleCategoryChange(
-    ctx: Context,
-    optionIndex: number,
-    buttonKey: string,
-  ): Promise<void> {
+  async handleCategoryChange(ctx: Context, optionIndex: number, buttonKey: string): Promise<void> {
     try {
       console.log('AdminNotificationService.handleCategoryChange called', {
         optionIndex,
