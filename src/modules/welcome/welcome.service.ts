@@ -10,6 +10,7 @@ import { UserService } from '../user/user.service';
 import { CommonService } from '../common/common.service';
 import { GroupService } from '../group/group.service';
 import { GroupRegistrationService } from '../group-registration/group-registration.service';
+import { AdminNotificationService } from '../group-registration/admin-notification.service';
 import { getContextTelegramUserId } from 'src/utils/context';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 
@@ -25,6 +26,7 @@ export class WelcomeService {
     private readonly userService: UserService,
     private readonly groupService: GroupService,
     private readonly groupRegistrationService: GroupRegistrationService,
+    private readonly adminNotificationService: AdminNotificationService,
     @Inject(forwardRef(() => CommonService))
     private readonly commonService: CommonService,
   ) {}
@@ -225,15 +227,24 @@ export class WelcomeService {
    * @returns {Promise<void>}
    */
   async handleCallbackQuery(ctx: Context) {
-    const callbackData =
-      ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    try {
+      const callbackData =
+        ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
 
-    if (!callbackData) {
-      return;
+      if (!callbackData) {
+        await ctx.answerCbQuery();
+        return;
+      }
+
+      await ctx.answerCbQuery();
+    } catch (error) {
+      console.error('Error in WelcomeService.handleCallbackQuery:', error);
+      try {
+        await ctx.answerCbQuery('❌ An error occurred');
+      } catch (e) {
+        console.error('Failed to send error callback:', e);
+      }
     }
-
-    // Handle any callback queries if needed
-    await ctx.answerCbQuery();
   }
 
   /**

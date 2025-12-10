@@ -37,8 +37,19 @@ export class PrivateChatMiddleware {
    */
   use(): MiddlewareFn<Context> {
     return async (ctx, next) => {
-      // Allow all non-message updates (inline queries, callback queries, etc.)
-      if (!ctx.chat && (ctx.inlineQuery || ctx.callbackQuery)) {
+      // Allow all callback queries (from any chat type - private, group, supergroup)
+      if (ctx.callbackQuery) {
+        return next();
+      }
+
+      // Allow all non-message updates (inline queries, etc.)
+      if (!ctx.chat && ctx.inlineQuery) {
+        return next();
+      }
+
+      // Allow my_chat_member events (for group registration when bot is added/removed)
+      const update = ctx.update as any;
+      if (update.my_chat_member) {
         return next();
       }
 

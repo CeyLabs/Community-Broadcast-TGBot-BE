@@ -7,6 +7,7 @@ import { Injectable } from '@nestjs/common';
 import { Context } from 'telegraf';
 import { GroupService } from '../group/group.service';
 import { IGroup } from '../group/group.interface';
+import { AdminNotificationService } from './admin-notification.service';
 import { TelegramLogger } from 'src/utils/telegram-logger';
 
 /**
@@ -19,7 +20,10 @@ export class GroupRegistrationService {
   // ID of the "Other" category - groups are registered here by default
   private readonly OTHER_CATEGORY_ID = '00000000-0000-0000-0001-000000000001';
 
-  constructor(private readonly groupService: GroupService) {}
+  constructor(
+    private readonly groupService: GroupService,
+    private readonly adminNotificationService: AdminNotificationService,
+  ) {}
 
   /**
    * Handles group registration when bot is added to a group
@@ -79,6 +83,12 @@ export class GroupRegistrationService {
           undefined,
         );
       }
+
+      // Notify admin group
+      const group = await this.groupService.getGroupByGroupId(groupId);
+      if (group) {
+        await this.adminNotificationService.notifyAdminGroupBotAdded(ctx, group);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Error in handleGroupRegistration:', error);
@@ -108,6 +118,9 @@ export class GroupRegistrationService {
           undefined,
           undefined,
         );
+
+        // Notify admin group
+        await this.adminNotificationService.notifyAdminGroupBotRemoved(ctx);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
