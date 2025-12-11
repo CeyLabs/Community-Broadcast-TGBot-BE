@@ -81,11 +81,15 @@ I'm already in this group and will receive broadcast messages from admins.
 Built with ❤️`);
       }
 
+      // Allow all messages from groups (for auto-registration from messages)
+      if (ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup') {
+        return next();
+      }
+
       // Allow only private chats for commands and text
       if (ctx.chat?.type === 'private') {
         return next();
       }
-      // Block everything else (like group text/commands)
 
       return;
     };

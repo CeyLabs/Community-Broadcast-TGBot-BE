@@ -10,8 +10,10 @@ import { Help, On, Update } from 'nestjs-telegraf';
 import { WelcomeService } from '../welcome/welcome.service';
 import { BroadcastService } from '../broadcast/broadcast.service';
 import { AdminNotificationService } from '../group-registration/admin-notification.service';
+import { GroupService } from '../group/group.service';
 import { TUserFlow, IUserState } from './common.interface';
 import { getContextTelegramUserId } from 'src/utils/context';
+import { TelegramLogger } from 'src/utils/telegram-logger';
 
 /**
  * Service for managing common functionality and user state
@@ -31,6 +33,7 @@ export class CommonService {
     @Inject(forwardRef(() => BroadcastService))
     private readonly broadcastService: BroadcastService,
     private readonly adminNotificationService: AdminNotificationService,
+    private readonly groupService: GroupService,
   ) {}
 
   /**
@@ -83,11 +86,51 @@ export class CommonService {
 
   /**
    * Handles incoming messages and routes them to appropriate services
+   * Also auto-registers groups when messages are received
    * @param {Context} ctx - The Telegraf context
    * @returns {Promise<void>}
    */
   @On('message')
   async handleMessage(ctx: Context) {
+    // Auto-register group if message is from a group
+    if (ctx.chat && (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup')) {
+      try {
+        const groupId = ctx.chat.id.toString();
+        const groupName = 'title' in ctx.chat ? ctx.chat.title : 'Unknown Group';
+
+        // Check if group already exists
+        const existingGroup = await this.groupService.getGroupByGroupId(groupId);
+
+        if (!existingGroup) {
+          // Register new group in "Other" category
+          const telegramLink = 'username' in ctx.chat ? `https://t.me/${ctx.chat.username}` : null;
+
+          await this.groupService.createGroup({
+            name: groupName,
+            group_id: groupId,
+            telegram_link: telegramLink || undefined,
+            category_id: '00000000-0000-0000-0001-000000000001', // Other category
+            subcategory_id: null,
+          });
+
+          await TelegramLogger.info(
+            `Group auto-registered from message: ${groupName} (${groupId})`,
+            undefined,
+            undefined,
+          );
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await TelegramLogger.error(
+          `Failed to auto-register group from message: ${errorMessage}`,
+          error,
+          undefined,
+        );
+      }
+      return;
+    }
+
+    // Handle private chat messages
     const userId = getContextTelegramUserId(ctx);
     if (!userId) return;
 
