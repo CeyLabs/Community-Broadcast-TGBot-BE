@@ -162,9 +162,10 @@ export class AdminNotificationService {
           },
         });
       } catch (sendError) {
-        // Log error but don't throw - group is already saved in DB
+        // Log actual error but don't throw - group is already saved in DB
+        const errorMsg = sendError instanceof Error ? sendError.message : String(sendError);
         await TelegramLogger.error(
-          'Failed to send admin notification but group was registered',
+          `Failed to send admin notification for group ${group.id}: ${errorMsg}`,
           sendError,
           undefined,
         );
@@ -211,8 +212,13 @@ export class AdminNotificationService {
           parse_mode: 'Markdown',
         });
       } catch (sendError) {
-        // Log error but don't throw - group removal is already handled
-        await TelegramLogger.error('Failed to send bot removal notification', sendError, undefined);
+        // Log actual error but don't throw - group removal is already handled
+        const errorMsg = sendError instanceof Error ? sendError.message : String(sendError);
+        await TelegramLogger.error(
+          `Failed to send bot removal notification: ${errorMsg}`,
+          sendError,
+          undefined,
+        );
       }
     } catch (error) {
       await TelegramLogger.error('Error notifying admin group about bot removal', error, undefined);
@@ -289,9 +295,10 @@ export class AdminNotificationService {
           parse_mode: 'Markdown',
         });
       } catch (editError) {
-        // Log error but don't throw - category change is already saved in DB
+        // Log actual error but don't throw - category change is already saved in DB
+        const errorMsg = editError instanceof Error ? editError.message : String(editError);
         await TelegramLogger.error(
-          'Failed to update notification message but category was changed',
+          `Failed to update notification message for group ${groupId}: ${errorMsg}`,
           editError,
           undefined,
         );
