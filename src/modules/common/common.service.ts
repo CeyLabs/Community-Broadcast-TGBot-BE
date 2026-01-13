@@ -26,6 +26,8 @@ import { TelegramLogger } from 'src/utils/telegram-logger';
 export class CommonService {
   /** Cache key prefix for user state */
   private readonly USER_STATE_PREFIX = 'user_state:';
+  /** ID of the "Other" category - groups are registered here by default */
+  private readonly OTHER_CATEGORY_ID = '00000000-0000-0000-0001-000000000001';
 
   constructor(
     @Inject(forwardRef(() => WelcomeService))
@@ -80,7 +82,7 @@ export class CommonService {
           name: groupName,
           group_id: groupId,
           telegram_link: telegramLink || undefined,
-          category_id: '00000000-0000-0000-0001-000000000001', // Other category
+          category_id: this.OTHER_CATEGORY_ID,
           subcategory_id: null,
         });
 
@@ -174,7 +176,7 @@ export class CommonService {
             name: groupName,
             group_id: groupId,
             telegram_link: telegramLink || undefined,
-            category_id: '00000000-0000-0000-0001-000000000001', // Other category
+            category_id: this.OTHER_CATEGORY_ID,
             subcategory_id: null,
           });
 
