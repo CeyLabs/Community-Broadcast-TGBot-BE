@@ -98,7 +98,7 @@ export class CommonService {
 
       // Send category selection message to admin
       if (group) {
-        await this.adminNotificationService.notifyAdminGroupBotAdded(ctx, group);
+        await this.adminNotificationService.notifyAdminGroupBotAdded(ctx, group, 'add_command');
       }
 
       // Try to delete the /add command message if bot is admin
@@ -185,6 +185,16 @@ export class CommonService {
             undefined,
             undefined,
           );
+
+          // Notify admin group about auto-registration
+          const group = await this.groupService.getGroupByGroupId(groupId);
+          if (group) {
+            await this.adminNotificationService.notifyAdminGroupBotAdded(
+              ctx,
+              group,
+              'auto_registration',
+            );
+          }
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

@@ -59,9 +59,14 @@ export class AdminNotificationService {
    * Sends notification to admin group when bot is added
    * @param {Context} ctx - The Telegraf context containing chat and user information
    * @param {IGroup} group - The newly registered group
+   * @param {string} registrationMethod - Optional method of registration ('add_command' | 'auto_registration')
    * @returns {Promise<void>}
    */
-  async notifyAdminGroupBotAdded(ctx: Context, group: IGroup): Promise<void> {
+  async notifyAdminGroupBotAdded(
+    ctx: Context,
+    group: IGroup,
+    registrationMethod?: string,
+  ): Promise<void> {
     try {
       const adminGroupIdStr = process.env.ADMIN_NOTIFICATIONS_GROUP_ID;
       if (!adminGroupIdStr) {
@@ -79,17 +84,15 @@ export class AdminNotificationService {
 
       let chat: any;
       let userFromGroup: any;
-      let addedViaCommand = false;
 
       if (myChatMember) {
         // Bot was added via invite or join
         chat = myChatMember.chat;
         userFromGroup = myChatMember.from;
       } else if (messageUpdate && ctx.chat) {
-        // Bot was registered via /add command
+        // Bot was registered via /add command or auto-registration
         chat = ctx.chat;
         userFromGroup = messageUpdate.from;
-        addedViaCommand = true;
       } else {
         return;
       }
@@ -106,7 +109,12 @@ export class AdminNotificationService {
       const userMention = `${userName} (ID: ${userFromGroup.id})`;
 
       // Build notification message
-      const addMethodText = addedViaCommand ? '📝 /add command' : '➕ Direct addition';
+      let addMethodText = '➕ Direct addition';
+      if (registrationMethod === 'add_command') {
+        addMethodText = '📝 /add command';
+      } else if (registrationMethod === 'auto_registration') {
+        addMethodText = '🔄 Auto registration';
+      }
       const message =
         `🤖 *Bot Added to Group*\n\n` +
         `📍 *Group:* ${chat.title || 'Unknown'}\n` +
