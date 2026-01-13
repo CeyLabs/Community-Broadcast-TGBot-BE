@@ -59,9 +59,14 @@ export class AdminNotificationService {
    * Sends notification to admin group when bot is added
    * @param {Context} ctx - The Telegraf context containing chat and user information
    * @param {IGroup} group - The newly registered group
+   * @param {string} registrationMethod - Optional method of registration ('add_command' | 'auto_registration')
    * @returns {Promise<void>}
    */
-  async notifyAdminGroupBotAdded(ctx: Context, group: IGroup): Promise<void> {
+  async notifyAdminGroupBotAdded(
+    ctx: Context,
+    group: IGroup,
+    registrationMethod?: string,
+  ): Promise<void> {
     try {
       const adminGroupIdStr = process.env.ADMIN_NOTIFICATIONS_GROUP_ID;
       if (!adminGroupIdStr) {
@@ -73,11 +78,24 @@ export class AdminNotificationService {
         return;
       }
 
+      // Handle both my_chat_member and message updates
       const myChatMember = (ctx.update as any).my_chat_member;
-      if (!myChatMember) return;
+      const messageUpdate = (ctx.update as any).message;
 
-      const chat = myChatMember.chat;
-      const userFromGroup = myChatMember.from;
+      let chat: any;
+      let userFromGroup: any;
+
+      if (myChatMember) {
+        // Bot was added via invite or join
+        chat = myChatMember.chat;
+        userFromGroup = myChatMember.from;
+      } else if (messageUpdate && ctx.chat) {
+        // Bot was registered via /add command or auto-registration
+        chat = ctx.chat;
+        userFromGroup = messageUpdate.from;
+      } else {
+        return;
+      }
 
       // Determine group type
       const isPublic = chat.username ? true : false;
@@ -91,12 +109,19 @@ export class AdminNotificationService {
       const userMention = `${userName} (ID: ${userFromGroup.id})`;
 
       // Build notification message
+      let addMethodText = '➕ Direct addition';
+      if (registrationMethod === 'add_command') {
+        addMethodText = '📝 /add command';
+      } else if (registrationMethod === 'auto_registration') {
+        addMethodText = '🔄 Auto registration';
+      }
       const message =
         `🤖 *Bot Added to Group*\n\n` +
         `📍 *Group:* ${chat.title || 'Unknown'}\n` +
         `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `${groupTypeStr}${urlPart}\n\n` +
         `👤 *Added by:* ${userMention}\n` +
+        `🔧 *Method:* ${addMethodText}\n` +
         `⏰ *Time:* ${new Date().toISOString()}\n\n` +
         `📊 *Status:* Automatically registered in "Other" category\n` +
         `🔗 *Message ID:* ${group.id}`;
@@ -162,9 +187,10 @@ export class AdminNotificationService {
           },
         });
       } catch (sendError) {
-        // Log error but don't throw - group is already saved in DB
+        // Log actual error but don't throw - group is already saved in DB
+        const errorMsg = sendError instanceof Error ? sendError.message : String(sendError);
         await TelegramLogger.error(
-          'Failed to send admin notification but group was registered',
+          `Failed to send admin notification for group ${group.id}: ${errorMsg}`,
           sendError,
           undefined,
         );
@@ -211,8 +237,13 @@ export class AdminNotificationService {
           parse_mode: 'Markdown',
         });
       } catch (sendError) {
-        // Log error but don't throw - group removal is already handled
-        await TelegramLogger.error('Failed to send bot removal notification', sendError, undefined);
+        // Log actual error but don't throw - group removal is already handled
+        const errorMsg = sendError instanceof Error ? sendError.message : String(sendError);
+        await TelegramLogger.error(
+          `Failed to send bot removal notification: ${errorMsg}`,
+          sendError,
+          undefined,
+        );
       }
     } catch (error) {
       await TelegramLogger.error('Error notifying admin group about bot removal', error, undefined);
@@ -289,9 +320,10 @@ export class AdminNotificationService {
           parse_mode: 'Markdown',
         });
       } catch (editError) {
-        // Log error but don't throw - category change is already saved in DB
+        // Log actual error but don't throw - category change is already saved in DB
+        const errorMsg = editError instanceof Error ? editError.message : String(editError);
         await TelegramLogger.error(
-          'Failed to update notification message but category was changed',
+          `Failed to update notification message for group ${groupId}: ${errorMsg}`,
           editError,
           undefined,
         );

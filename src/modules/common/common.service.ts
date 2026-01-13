@@ -6,12 +6,14 @@
 import RunCache from 'run-cache';
 import { Context } from 'telegraf';
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
-import { Help, On, Update } from 'nestjs-telegraf';
+import { Command, Help, On, Update } from 'nestjs-telegraf';
 import { WelcomeService } from '../welcome/welcome.service';
 import { BroadcastService } from '../broadcast/broadcast.service';
 import { AdminNotificationService } from '../group-registration/admin-notification.service';
+import { GroupService } from '../group/group.service';
 import { TUserFlow, IUserState } from './common.interface';
 import { getContextTelegramUserId } from 'src/utils/context';
+import { TelegramLogger } from 'src/utils/telegram-logger';
 
 /**
  * Service for managing common functionality and user state
@@ -24,6 +26,8 @@ import { getContextTelegramUserId } from 'src/utils/context';
 export class CommonService {
   /** Cache key prefix for user state */
   private readonly USER_STATE_PREFIX = 'user_state:';
+  /** ID of the "Other" category - groups are registered here by default */
+  private readonly OTHER_CATEGORY_ID = '00000000-0000-0000-0001-000000000001';
 
   constructor(
     @Inject(forwardRef(() => WelcomeService))
@@ -31,6 +35,7 @@ export class CommonService {
     @Inject(forwardRef(() => BroadcastService))
     private readonly broadcastService: BroadcastService,
     private readonly adminNotificationService: AdminNotificationService,
+    private readonly groupService: GroupService,
   ) {}
 
   /**
@@ -49,6 +54,71 @@ export class CommonService {
         '4\\. `/help` \\- Show this help menu\\.\n\n' +
         'If you have any questions or need further assistance, feel free to reach out\\!',
     );
+  }
+
+  /**
+   * Handles the /add command in groups
+   * @param {Context} ctx - The Telegraf context
+   * @returns {Promise<void>}
+   */
+  @Command('add')
+  async handleAddCommand(ctx: Context) {
+    try {
+      // Only work in groups
+      if (!ctx.chat || (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup')) {
+        return;
+      }
+
+      const groupId = ctx.chat.id.toString();
+      const groupName = 'title' in ctx.chat ? ctx.chat.title : 'Unknown Group';
+      const telegramLink = 'username' in ctx.chat ? `https://t.me/${ctx.chat.username}` : null;
+
+      // Check if group already exists
+      let group = await this.groupService.getGroupByGroupId(groupId);
+
+      if (!group) {
+        // Register new group in "Other" category
+        await this.groupService.createGroup({
+          name: groupName,
+          group_id: groupId,
+          telegram_link: telegramLink || undefined,
+          category_id: this.OTHER_CATEGORY_ID,
+          subcategory_id: null,
+        });
+
+        await TelegramLogger.info(
+          `Group registered via /add command: ${groupName} (${groupId})`,
+          undefined,
+          undefined,
+        );
+
+        // Get the newly created group
+        group = await this.groupService.getGroupByGroupId(groupId);
+      }
+
+      // Send category selection message to admin
+      if (group) {
+        await this.adminNotificationService.notifyAdminGroupBotAdded(ctx, group, 'add_command');
+      }
+
+      // Try to delete the /add command message if bot is admin
+      try {
+        if ('message' in ctx.update && ctx.update.message) {
+          const messageId = ctx.update.message.message_id;
+          await ctx.deleteMessage(messageId);
+        }
+      } catch {
+        // Silently fail if bot doesn't have permission to delete messages
+        // This happens when bot is not an admin
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await TelegramLogger.error(
+        `Failed to handle /add command: ${errorMessage}`,
+        error,
+        undefined,
+      );
+    }
   }
 
   /**
@@ -83,11 +153,61 @@ export class CommonService {
 
   /**
    * Handles incoming messages and routes them to appropriate services
+   * Also auto-registers groups when messages are received
    * @param {Context} ctx - The Telegraf context
    * @returns {Promise<void>}
    */
   @On('message')
   async handleMessage(ctx: Context) {
+    // Auto-register group if message is from a group
+    if (ctx.chat && (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup')) {
+      try {
+        const groupId = ctx.chat.id.toString();
+        const groupName = 'title' in ctx.chat ? ctx.chat.title : 'Unknown Group';
+
+        // Check if group already exists
+        const existingGroup = await this.groupService.getGroupByGroupId(groupId);
+
+        if (!existingGroup) {
+          // Register new group in "Other" category
+          const telegramLink = 'username' in ctx.chat ? `https://t.me/${ctx.chat.username}` : null;
+
+          await this.groupService.createGroup({
+            name: groupName,
+            group_id: groupId,
+            telegram_link: telegramLink || undefined,
+            category_id: this.OTHER_CATEGORY_ID,
+            subcategory_id: null,
+          });
+
+          await TelegramLogger.info(
+            `Group auto-registered from message: ${groupName} (${groupId})`,
+            undefined,
+            undefined,
+          );
+
+          // Notify admin group about auto-registration
+          const group = await this.groupService.getGroupByGroupId(groupId);
+          if (group) {
+            await this.adminNotificationService.notifyAdminGroupBotAdded(
+              ctx,
+              group,
+              'auto_registration',
+            );
+          }
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await TelegramLogger.error(
+          `Failed to auto-register group from message: ${errorMessage}`,
+          error,
+          undefined,
+        );
+      }
+      return;
+    }
+
+    // Handle private chat messages
     const userId = getContextTelegramUserId(ctx);
     if (!userId) return;
 
