@@ -6,7 +6,7 @@
 import RunCache from 'run-cache';
 import { Context } from 'telegraf';
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
-import { Help, On, Update } from 'nestjs-telegraf';
+import { Command, Help, On, Update } from 'nestjs-telegraf';
 import { WelcomeService } from '../welcome/welcome.service';
 import { BroadcastService } from '../broadcast/broadcast.service';
 import { AdminNotificationService } from '../group-registration/admin-notification.service';
@@ -52,6 +52,71 @@ export class CommonService {
         '4\\. `/help` \\- Show this help menu\\.\n\n' +
         'If you have any questions or need further assistance, feel free to reach out\\!',
     );
+  }
+
+  /**
+   * Handles the /add command in groups
+   * @param {Context} ctx - The Telegraf context
+   * @returns {Promise<void>}
+   */
+  @Command('add')
+  async handleAddCommand(ctx: Context) {
+    try {
+      // Only work in groups
+      if (!ctx.chat || (ctx.chat.type !== 'group' && ctx.chat.type !== 'supergroup')) {
+        return;
+      }
+
+      const groupId = ctx.chat.id.toString();
+      const groupName = 'title' in ctx.chat ? ctx.chat.title : 'Unknown Group';
+      const telegramLink = 'username' in ctx.chat ? `https://t.me/${ctx.chat.username}` : null;
+
+      // Check if group already exists
+      let group = await this.groupService.getGroupByGroupId(groupId);
+
+      if (!group) {
+        // Register new group in "Other" category
+        await this.groupService.createGroup({
+          name: groupName,
+          group_id: groupId,
+          telegram_link: telegramLink || undefined,
+          category_id: '00000000-0000-0000-0001-000000000001', // Other category
+          subcategory_id: null,
+        });
+
+        await TelegramLogger.info(
+          `Group registered via /add command: ${groupName} (${groupId})`,
+          undefined,
+          undefined,
+        );
+
+        // Get the newly created group
+        group = await this.groupService.getGroupByGroupId(groupId);
+      }
+
+      // Send category selection message to admin
+      if (group) {
+        await this.adminNotificationService.notifyAdminGroupBotAdded(ctx, group);
+      }
+
+      // Try to delete the /add command message if bot is admin
+      try {
+        if ('message' in ctx.update && ctx.update.message) {
+          const messageId = ctx.update.message.message_id;
+          await ctx.deleteMessage(messageId);
+        }
+      } catch {
+        // Silently fail if bot doesn't have permission to delete messages
+        // This happens when bot is not an admin
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await TelegramLogger.error(
+        `Failed to handle /add command: ${errorMessage}`,
+        error,
+        undefined,
+      );
+    }
   }
 
   /**

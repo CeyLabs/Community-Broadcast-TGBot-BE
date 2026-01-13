@@ -73,11 +73,26 @@ export class AdminNotificationService {
         return;
       }
 
+      // Handle both my_chat_member and message updates
       const myChatMember = (ctx.update as any).my_chat_member;
-      if (!myChatMember) return;
+      const messageUpdate = (ctx.update as any).message;
 
-      const chat = myChatMember.chat;
-      const userFromGroup = myChatMember.from;
+      let chat: any;
+      let userFromGroup: any;
+      let addedViaCommand = false;
+
+      if (myChatMember) {
+        // Bot was added via invite or join
+        chat = myChatMember.chat;
+        userFromGroup = myChatMember.from;
+      } else if (messageUpdate && ctx.chat) {
+        // Bot was registered via /add command
+        chat = ctx.chat;
+        userFromGroup = messageUpdate.from;
+        addedViaCommand = true;
+      } else {
+        return;
+      }
 
       // Determine group type
       const isPublic = chat.username ? true : false;
@@ -91,12 +106,14 @@ export class AdminNotificationService {
       const userMention = `${userName} (ID: ${userFromGroup.id})`;
 
       // Build notification message
+      const addMethodText = addedViaCommand ? '📝 /add command' : '➕ Direct addition';
       const message =
         `🤖 *Bot Added to Group*\n\n` +
         `📍 *Group:* ${chat.title || 'Unknown'}\n` +
         `🔢 *Group ID:* ${chat.id.toString()}\n` +
         `${groupTypeStr}${urlPart}\n\n` +
         `👤 *Added by:* ${userMention}\n` +
+        `🔧 *Method:* ${addMethodText}\n` +
         `⏰ *Time:* ${new Date().toISOString()}\n\n` +
         `📊 *Status:* Automatically registered in "Other" category\n` +
         `🔗 *Message ID:* ${group.id}`;
