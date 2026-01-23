@@ -42,6 +42,17 @@ export class GroupRegistrationService {
       const groupName = ctx.chat.title || 'Unknown Group';
       const telegramLink = await this.getGroupInviteLink(ctx);
 
+      // Get user who added the bot
+      const myChatMember = (ctx.update as any).my_chat_member;
+      let userInfo = 'Unknown User';
+      if (myChatMember && myChatMember.from) {
+        const user = myChatMember.from;
+        const userName = user.first_name
+          ? `${user.first_name} ${user.last_name || ''}`.trim()
+          : `User ${user.id}`;
+        userInfo = `${userName} (ID: ${user.id})`;
+      }
+
       // Check if group already exists
       const existingGroup = await this.groupService.getGroupByGroupId(groupId);
 
@@ -62,7 +73,7 @@ export class GroupRegistrationService {
 
           await this.groupService.updateGroup(existingGroup.id, updateData);
           await TelegramLogger.info(
-            `Group updated: ${groupName} (${groupId})`,
+            `Group updated: ${groupName} (${groupId}) - Updated by: ${userInfo}`,
             undefined,
             undefined,
           );
@@ -78,7 +89,7 @@ export class GroupRegistrationService {
         });
 
         await TelegramLogger.info(
-          `New group registered: ${groupName} (${groupId})`,
+          `New group registered: ${groupName} (${groupId}) - Added by: ${userInfo}`,
           undefined,
           undefined,
         );
@@ -112,9 +123,20 @@ export class GroupRegistrationService {
       const group = await this.groupService.getGroupByGroupId(groupId);
 
       if (group) {
+        // Get user who removed the bot
+        const myChatMember = (ctx.update as any).my_chat_member;
+        let userInfo = 'Unknown User';
+        if (myChatMember && myChatMember.from) {
+          const user = myChatMember.from;
+          const userName = user.first_name
+            ? `${user.first_name} ${user.last_name || ''}`.trim()
+            : `User ${user.id}`;
+          userInfo = `${userName} (ID: ${user.id})`;
+        }
+
         // Log the removal but keep the group data in database
         await TelegramLogger.info(
-          `Bot removed from group: ${group.name} (${groupId})`,
+          `Bot removed from group: ${group.name} (${groupId}) - Removed by: ${userInfo}`,
           undefined,
           undefined,
         );
