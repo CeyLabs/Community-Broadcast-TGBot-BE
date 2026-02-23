@@ -60,6 +60,8 @@ export class BroadcastService {
    */
   @Command('broadcast')
   async onBroadcast(@Ctx() ctx: Context): Promise<void> {
+    if (ctx.chat?.type !== 'private') return;
+
     const userId = getContextTelegramUserId(ctx);
 
     if (!userId) {
@@ -1537,6 +1539,7 @@ Here you can create and broadcast messages to community groups\\.
     ctx: Context,
     mediaType: 'photo' | 'video' | 'document' | 'animation',
   ): Promise<void> {
+    if (ctx.chat?.type !== 'private') return;
     if (!ctx.from?.id) return;
 
     const userId = getContextTelegramUserId(ctx);
