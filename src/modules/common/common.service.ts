@@ -86,8 +86,19 @@ export class CommonService {
           subcategory_id: null,
         });
 
+        // Get user who executed the /add command
+        const messageUpdate = (ctx.update as any).message;
+        let userInfo = 'Unknown User';
+        if (messageUpdate && messageUpdate.from) {
+          const user = messageUpdate.from;
+          const userName = user.first_name
+            ? `${user.first_name} ${user.last_name || ''}`.trim()
+            : `User ${user.id}`;
+          userInfo = `${userName} (ID: ${user.id})`;
+        }
+
         await TelegramLogger.info(
-          `Group registered via /add command: ${groupName} (${groupId})`,
+          `Group registered via /add command: ${groupName} (${groupId}) - Added by: ${userInfo}`,
           undefined,
           undefined,
         );

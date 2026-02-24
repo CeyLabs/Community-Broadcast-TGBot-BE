@@ -23,6 +23,9 @@ export class AdminNotificationService {
     string,
     {
       groupId: string;
+      userInfo: string;
+      addedAt: string;
+      groupType: string;
       options: Array<{
         id: string;
         name: string;
@@ -169,6 +172,9 @@ export class AdminNotificationService {
         const buttonKey = this.generateKey();
         this.buttonMap.set(buttonKey, {
           groupId: group.id,
+          userInfo: userMention,
+          addedAt: new Date().toISOString(),
+          groupType: groupTypeStr,
           options: selectableOptions,
         });
 
@@ -225,11 +231,19 @@ export class AdminNotificationService {
       if (!myChatMember) return;
 
       const chat = myChatMember.chat;
+      const userFromGroup = myChatMember.from;
+
+      // Get user info who removed the bot
+      const userName = userFromGroup.first_name
+        ? `${userFromGroup.first_name} ${userFromGroup.last_name || ''}`.trim()
+        : `User ${userFromGroup.id}`;
+      const userMention = `${userName} (ID: ${userFromGroup.id})`;
 
       const message =
         `❌ *Bot Removed from Group*\n\n` +
         `📍 *Group:* ${chat.title || 'Unknown'}\n` +
         `🔢 *Group ID:* ${chat.id.toString()}\n` +
+        `👤 *Removed by:* ${userMention}\n` +
         `⏰ *Time:* ${new Date().toISOString()}`;
 
       try {
@@ -312,6 +326,8 @@ export class AdminNotificationService {
         `📍 *Group:* ${group.name || 'Unknown'}\n` +
         `🔢 *Group ID:* ${group.group_id.toString()}\n` +
         `${group.telegram_link ? '🌐 Public' : '🔒 Private'}\n\n` +
+        `👤 *Added by:* ${mapping.userInfo}\n` +
+        `⏰ *Time:* ${mapping.addedAt}\n\n` +
         `📊 *Status:* ${statusText}\n` +
         `🔗 *Message ID:* ${group.id}`;
 
